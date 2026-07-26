@@ -32,8 +32,14 @@ export class PushService {
   }
 
   async sendToUser(userId: string, payload: PushPayload) {
+    return this.sendToUsers([userId], payload);
+  }
+
+  /** One token lookup + one gateway call for many users, instead of N of each. */
+  async sendToUsers(userIds: string[], payload: PushPayload) {
+    if (userIds.length === 0) return;
     const tokens = await this.prisma.deviceToken.findMany({
-      where: { userId },
+      where: { userId: { in: userIds } },
       select: { token: true },
     });
     if (tokens.length === 0) return;

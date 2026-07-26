@@ -15,6 +15,8 @@ async function main() {
   const guardPasswordHash = await argon2.hash('guard123');
   const tempPasswordHash = await argon2.hash('temp1234');
   const adminPasswordHash = await argon2.hash('admin123');
+  const financePasswordHash = await argon2.hash('finance123');
+  const projectAdminPasswordHash = await argon2.hash('project123');
 
   // update: restores the demo password/flag on every reseed — otherwise
   // exercising login/reset flows during testing permanently drifts these
@@ -66,6 +68,30 @@ async function main() {
       passwordHash: adminPasswordHash,
       role: 'ADMIN',
       fullName: 'Estate Admin',
+      mustResetPassword: false,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { phone: '08000000002' },
+    update: { passwordHash: financePasswordHash, mustResetPassword: false },
+    create: {
+      phone: '08000000002',
+      passwordHash: financePasswordHash,
+      role: 'FINANCE_SECRETARY',
+      fullName: 'Chidinma Okafor',
+      mustResetPassword: false,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { phone: '08000000003' },
+    update: { passwordHash: projectAdminPasswordHash, mustResetPassword: false },
+    create: {
+      phone: '08000000003',
+      passwordHash: projectAdminPasswordHash,
+      role: 'PROJECT_ADMIN',
+      fullName: 'Tunde Balogun',
       mustResetPassword: false,
     },
   });
@@ -373,6 +399,8 @@ async function main() {
   console.log('  Guard login:    08052229981 / guard123');
   console.log('  Force-reset demo login: 08099990000 / temp1234');
   console.log('  Admin login:    08000000001 / admin123');
+  console.log('  Finance Secretary login: 08000000002 / finance123');
+  console.log('  Project Admin login:     08000000003 / project123');
 }
 
 main()

@@ -7,8 +7,8 @@ export class CreateUserDto {
   @IsString()
   fullName!: string;
 
-  @IsIn(['RESIDENT', 'GUARD'])
-  role!: 'RESIDENT' | 'GUARD';
+  @IsIn(['RESIDENT', 'GUARD', 'ADMIN', 'FINANCE_SECRETARY', 'PROJECT_ADMIN'])
+  role!: 'RESIDENT' | 'GUARD' | 'ADMIN' | 'FINANCE_SECRETARY' | 'PROJECT_ADMIN';
 
   @IsOptional()
   @IsString()

@@ -1,9 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 
 @Injectable()
 export class AnnouncementsService {
   constructor(private prisma: PrismaService) {}
+
+  create(dto: CreateAnnouncementDto) {
+    return this.prisma.announcement.create({ data: dto });
+  }
 
   async list(userId: string) {
     const [announcements, reads] = await Promise.all([

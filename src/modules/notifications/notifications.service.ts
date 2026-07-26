@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { PushService } from '../push/push.service';
+import { BroadcastDto } from './dto/broadcast.dto';
+
+const BROADCAST_ROLES: Record<BroadcastDto['target'], ('RESIDENT' | 'GUARD')[]> = {
+  RESIDENTS: ['RESIDENT'],
+  GUARDS: ['GUARD'],
+  ALL: ['RESIDENT', 'GUARD'],
+};
 
 @Injectable()
 export class NotificationsService {
@@ -38,5 +45,25 @@ export class NotificationsService {
       body: message,
       data: { type },
     });
+  }
+
+  /** An admin-initiated message to every resident/guard/both, not tied to any one user's event. */
+  async broadcast(dto: BroadcastDto) {
+    const users = await this.prisma.user.findMany({
+      where: { role: { in: BROADCAST_ROLES[dto.target] } },
+      select: { id: true },
+    });
+    const userIds = users.map((u) => u.id);
+
+    await this.prisma.notification.createMany({
+      data: userIds.map((userId) => ({ userId, title: dto.message, type: 'broadcast' })),
+    });
+    await this.push.sendToUsers(userIds, {
+      title: 'CommunityHub',
+      body: dto.message,
+      data: { type: 'broadcast' },
+    });
+
+    return { message: `Sent to ${userIds.length} recipient(s).` };
   }
 }

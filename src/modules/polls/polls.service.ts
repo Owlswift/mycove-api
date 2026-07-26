@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { VoteDto } from './dto/vote.dto';
+import { CreatePollDto } from './dto/create-poll.dto';
 
 function closesInLabel(closesAt: Date): string {
   const days = Math.ceil(
@@ -52,6 +53,19 @@ export class PollsService {
           };
         }),
       };
+    });
+  }
+
+  create(dto: CreatePollDto) {
+    return this.prisma.poll.create({
+      data: {
+        question: dto.question,
+        closesAt: new Date(Date.now() + dto.closesInDays * 24 * 60 * 60 * 1000),
+        options: {
+          create: dto.options.map((label) => ({ label, baseVotes: 0 })),
+        },
+      },
+      include: { options: true },
     });
   }
 

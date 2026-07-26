@@ -9,6 +9,6 @@ export class LoginDto {
   password!: string;
 
   @IsOptional()
-  @IsIn(['RESIDENT', 'GUARD', 'ADMIN'])
-  role?: 'RESIDENT' | 'GUARD' | 'ADMIN';
+  @IsIn(['RESIDENT', 'GUARD', 'ADMIN', 'FINANCE_SECRETARY', 'PROJECT_ADMIN'])
+  role?: 'RESIDENT' | 'GUARD' | 'ADMIN' | 'FINANCE_SECRETARY' | 'PROJECT_ADMIN';
 }

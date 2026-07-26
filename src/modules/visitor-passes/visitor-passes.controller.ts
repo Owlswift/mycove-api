@@ -50,7 +50,7 @@ export class VisitorPassesController {
   }
 
   @Get('access-log')
-  @Roles('GUARD')
+  @Roles('GUARD', 'ADMIN')
   accessLog() {
     return this.visitorPasses.accessLog();
   }

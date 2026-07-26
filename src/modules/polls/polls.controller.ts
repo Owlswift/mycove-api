@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { PollsService } from './polls.service';
 import { VoteDto } from './dto/vote.dto';
+import { CreatePollDto } from './dto/create-poll.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -14,6 +15,7 @@ export class PollsController {
   constructor(private polls: PollsService) {}
 
   @Get()
+  @Roles('RESIDENT', 'ADMIN')
   list(@CurrentUser() user: AuthUser) {
     return this.polls.list(user.sub);
   }
@@ -25,5 +27,11 @@ export class PollsController {
     @Body() dto: VoteDto,
   ) {
     return this.polls.vote(user.sub, id, dto);
+  }
+
+  @Post()
+  @Roles('ADMIN')
+  create(@Body() dto: CreatePollDto) {
+    return this.polls.create(dto);
   }
 }

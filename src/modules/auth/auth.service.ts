@@ -22,6 +22,17 @@ const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TOKEN_TTL = '30d';
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
+const ROLE_LABELS: Record<string, string> = {
+  RESIDENT: 'a resident',
+  GUARD: 'a security guard',
+  ADMIN: 'an admin',
+  FINANCE_SECRETARY: 'a finance secretary',
+  PROJECT_ADMIN: 'a project admin',
+};
+function roleLabel(role: string): string {
+  return ROLE_LABELS[role] ?? role;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -38,7 +49,7 @@ export class AuthService {
 
     if (dto.role && dto.role !== user.role) {
       throw new UnauthorizedException(
-        `This account is registered as a ${user.role === 'RESIDENT' ? 'resident' : 'security guard'}.`,
+        `This account is registered as ${roleLabel(user.role)}.`,
       );
     }
 

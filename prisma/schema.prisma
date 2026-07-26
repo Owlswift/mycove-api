@@ -10,6 +10,8 @@ enum Role {
   RESIDENT
   GUARD
   ADMIN
+  FINANCE_SECRETARY
+  PROJECT_ADMIN
 }
 
 model User {
@@ -26,19 +28,22 @@ model User {
   mustResetPassword     Boolean  @default(false)
   createdAt             DateTime @default(now())
 
-  announcementReads AnnouncementRead[]
-  calendarEntries   CalendarEntry[]
-  duesLedgerEntries DuesLedgerEntry[]
-  levyPayments      LevyPayment[]
-  payments          Payment[]
-  visitorPasses     VisitorPass[]      @relation("ResidentPasses")
-  guardLogEntries   AccessLogEntry[]   @relation("GuardEntries")
-  projectDonations  ProjectDonation[]
-  pollVotes         PollVote[]
-  notifications     Notification[]
-  complaints        Complaint[]
-  passwordResetOtps PasswordResetOtp[]
-  deviceTokens      DeviceToken[]
+  announcementReads  AnnouncementRead[]
+  calendarEntries    CalendarEntry[]
+  duesLedgerEntries  DuesLedgerEntry[]
+  levyPayments       LevyPayment[]
+  payments           Payment[]
+  visitorPasses      VisitorPass[]       @relation("ResidentPasses")
+  guardLogEntries    AccessLogEntry[]    @relation("GuardEntries")
+  projectDonations   ProjectDonation[]
+  pollVotes          PollVote[]
+  notifications      Notification[]
+  complaints         Complaint[]
+  passwordResetOtps  PasswordResetOtp[]
+  deviceTokens       DeviceToken[]
+  projectAllocations ProjectAllocation[] @relation("AllocatedBy")
+  invoicesRaised     Invoice[]           @relation("InvoiceRaisedBy")
+  invoicesReviewed   Invoice[]           @relation("InvoiceReviewedBy")
 }
 
 enum DevicePlatform {
@@ -241,6 +246,8 @@ model Project {
   budgetLines ProjectBudgetLine[]
   reports     ProjectReport[]
   donations   ProjectDonation[]
+  allocations ProjectAllocation[]
+  invoices    Invoice[]
 }
 
 model ProjectBudgetLine {
@@ -271,6 +278,55 @@ model ProjectDonation {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Money the Finance Secretary has moved from the estate treasury (total
+/// collected dues + levies) into a specific project's budget. The
+/// treasury balance is always derived from source transactions — total
+/// successful DUES/LEVY payments minus the sum of these — never stored
+/// redundantly, so it can't drift out of sync the way earlier seed-data
+/// bugs this session did.
+model ProjectAllocation {
+  id            String   @id @default(cuid())
+  projectId     String
+  amount        Int
+  allocatedById String
+  note          String?
+  createdAt     DateTime @default(now())
+
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  allocatedBy User    @relation("AllocatedBy", fields: [allocatedById], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+enum InvoiceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Raised by a PROJECT_ADMIN against a project's allocated budget;
+/// approving one by a FINANCE_SECRETARY actually deducts from that
+/// project's remaining allocated budget (computed as sum(allocations) -
+/// sum(approved invoices)), rejecting one has no financial effect.
+model Invoice {
+  id           String        @id @default(cuid())
+  projectId    String
+  amount       Int
+  description  String
+  vendor       String?
+  status       InvoiceStatus @default(PENDING)
+  raisedById   String
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime      @default(now())
+
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  raisedBy   User    @relation("InvoiceRaisedBy", fields: [raisedById], references: [id], onDelete: Cascade)
+  reviewedBy User?   @relation("InvoiceReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
 }
 
 model Poll {
