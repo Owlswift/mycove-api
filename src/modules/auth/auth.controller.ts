@@ -5,6 +5,8 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { CompleteForceResetDto } from './dto/complete-force-reset.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { LogoutDto } from './dto/logout.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
@@ -33,6 +35,11 @@ export class AuthController {
     return this.auth.resetPassword(dto);
   }
 
+  @Post('refresh')
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.auth.refresh(dto);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post('complete-force-reset')
   completeForceReset(
@@ -44,7 +51,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('logout')
-  logout(@CurrentUser() user: AuthUser) {
-    return this.auth.logout(user.sub, user.jti);
+  logout(@CurrentUser() user: AuthUser, @Body() dto: LogoutDto) {
+    return this.auth.logout(user.sub, user.jti, dto.refreshToken);
   }
 }
