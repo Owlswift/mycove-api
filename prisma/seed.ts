@@ -15,9 +15,12 @@ async function main() {
   const guardPasswordHash = await argon2.hash('guard123');
   const tempPasswordHash = await argon2.hash('temp1234');
 
+  // update: restores the demo password/flag on every reseed — otherwise
+  // exercising login/reset flows during testing permanently drifts these
+  // accounts away from their documented demo credentials.
   const resident = await prisma.user.upsert({
     where: { phone: '08035550142' },
-    update: {},
+    update: { passwordHash: residentPasswordHash, mustResetPassword: false },
     create: {
       phone: '08035550142',
       passwordHash: residentPasswordHash,
@@ -29,7 +32,7 @@ async function main() {
 
   const guard = await prisma.user.upsert({
     where: { phone: '08052229981' },
-    update: {},
+    update: { passwordHash: guardPasswordHash },
     create: {
       phone: '08052229981',
       passwordHash: guardPasswordHash,
@@ -41,7 +44,7 @@ async function main() {
   // Preserves the mockup's "Try temp1234 to preview first-time setup" demo path.
   await prisma.user.upsert({
     where: { phone: '08099990000' },
-    update: {},
+    update: { passwordHash: tempPasswordHash, mustResetPassword: true },
     create: {
       phone: '08099990000',
       passwordHash: tempPasswordHash,
