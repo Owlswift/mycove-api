@@ -1,0 +1,352 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  RESIDENT
+  GUARD
+}
+
+model User {
+  id                String    @id @default(cuid())
+  phone             String    @unique
+  passwordHash      String
+  role              Role
+  fullName          String
+  house             String?
+  mustResetPassword Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+
+  announcementReads AnnouncementRead[]
+  calendarEntries   CalendarEntry[]
+  duesLedgerEntries DuesLedgerEntry[]
+  levyPayments      LevyPayment[]
+  payments          Payment[]
+  visitorPasses     VisitorPass[]      @relation("ResidentPasses")
+  guardLogEntries   AccessLogEntry[]   @relation("GuardEntries")
+  projectDonations  ProjectDonation[]
+  pollVotes         PollVote[]
+  notifications     Notification[]
+  complaints        Complaint[]
+  passwordResetOtps PasswordResetOtp[]
+  deviceTokens      DeviceToken[]
+}
+
+enum DevicePlatform {
+  ANDROID
+  IOS
+}
+
+model DeviceToken {
+  id        String         @id @default(cuid())
+  userId    String
+  token     String         @unique
+  platform  DevicePlatform
+  createdAt DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetOtp {
+  id         String    @id @default(cuid())
+  userId     String
+  code       String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model BlacklistedToken {
+  id        String   @id @default(cuid())
+  tokenJti  String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([tokenJti])
+  @@index([expiresAt])
+}
+
+model Announcement {
+  id          String   @id @default(cuid())
+  title       String
+  category    String
+  body        String
+  publishedAt DateTime @default(now())
+
+  reads AnnouncementRead[]
+}
+
+model AnnouncementRead {
+  id             String   @id @default(cuid())
+  userId         String
+  announcementId String
+  readAt         DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, announcementId])
+}
+
+model Meeting {
+  id        String   @id @default(cuid())
+  title       String
+  date        String
+  time        String
+  location    String
+  agenda      String[]
+  scheduledAt DateTime
+  createdAt   DateTime @default(now())
+
+  calendarEntries CalendarEntry[]
+}
+
+model CalendarEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  meetingId String
+  addedAt   DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, meetingId])
+}
+
+enum DuesEntryType {
+  CHARGE
+  PAYMENT
+}
+
+model DuesLedgerEntry {
+  id        String        @id @default(cuid())
+  userId    String
+  date      String
+  desc      String
+  type      DuesEntryType
+  amount    Int
+  createdAt DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Levy {
+  id      String @id @default(cuid())
+  label   String
+  amount  Int
+  dueDate String
+
+  payments LevyPayment[]
+}
+
+model LevyPayment {
+  id     String   @id @default(cuid())
+  userId String
+  levyId String
+  paidAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  levy Levy @relation(fields: [levyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, levyId])
+}
+
+enum PaymentPurpose {
+  DUES
+  LEVY
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model Payment {
+  id        String         @id @default(cuid())
+  userId    String
+  reference String         @unique
+  purpose   PaymentPurpose
+  levyId    String?
+  amount    Int
+  status    PaymentStatus  @default(PENDING)
+  createdAt DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VisitorPass {
+  id         String   @id @default(cuid())
+  residentId String
+  name       String
+  phone      String
+  plate      String?
+  code       String   @unique
+  validUntil DateTime
+  revoked    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  resident         User             @relation("ResidentPasses", fields: [residentId], references: [id], onDelete: Cascade)
+  accessLogEntries AccessLogEntry[]
+
+  @@index([residentId])
+}
+
+model AccessLogEntry {
+  id            String    @id @default(cuid())
+  visitorPassId String
+  guardId       String
+  entryAt       DateTime  @default(now())
+  exitAt        DateTime?
+
+  visitorPass VisitorPass @relation(fields: [visitorPassId], references: [id], onDelete: Cascade)
+  guard       User        @relation("GuardEntries", fields: [guardId], references: [id], onDelete: Cascade)
+
+  @@index([visitorPassId])
+}
+
+enum ProjectStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  title       String
+  status      ProjectStatus
+  progress    Int
+  description String
+  goal        Int
+  baseRaised  Int
+
+  budgetLines ProjectBudgetLine[]
+  reports     ProjectReport[]
+  donations   ProjectDonation[]
+}
+
+model ProjectBudgetLine {
+  id        String @id @default(cuid())
+  projectId String
+  label     String
+  amount    Int
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ProjectReport {
+  id        String @id @default(cuid())
+  projectId String
+  author    String
+  date      String
+  text      String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ProjectDonation {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  amount    Int
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Poll {
+  id       String   @id @default(cuid())
+  question String
+  closesAt DateTime
+
+  options PollOption[]
+  votes   PollVote[]
+}
+
+model PollOption {
+  id        String @id @default(cuid())
+  pollId    String
+  label     String
+  baseVotes Int
+
+  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+}
+
+model PollVote {
+  id       String   @id @default(cuid())
+  userId   String
+  pollId   String
+  optionId String
+  votedAt  DateTime @default(now())
+
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pollId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  type      String
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model RulesSection {
+  id    String @id @default(cuid())
+  title String
+  order Int
+
+  items RuleItem[]
+}
+
+model RuleItem {
+  id        String @id @default(cuid())
+  sectionId String
+  text      String
+  order     Int
+
+  section RulesSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+}
+
+enum ComplaintStatus {
+  SUBMITTED
+  IN_REVIEW
+  RESOLVED
+}
+
+model Complaint {
+  id          String          @id @default(cuid())
+  userId      String
+  category    String
+  description String
+  ref         String          @unique
+  status      ComplaintStatus @default(SUBMITTED)
+  createdAt   DateTime        @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

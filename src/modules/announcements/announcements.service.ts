@@ -1,0 +1,44 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../database/prisma.service';
+
+@Injectable()
+export class AnnouncementsService {
+  constructor(private prisma: PrismaService) {}
+
+  async list(userId: string) {
+    const [announcements, reads] = await Promise.all([
+      this.prisma.announcement.findMany({ orderBy: { publishedAt: 'desc' } }),
+      this.prisma.announcementRead.findMany({
+        where: { userId },
+        select: { announcementId: true },
+      }),
+    ]);
+    const readIds = new Set(reads.map((r) => r.announcementId));
+
+    return announcements.map((a) => ({
+      id: a.id,
+      title: a.title,
+      category: a.category,
+      publishedAt: a.publishedAt,
+      unread: !readIds.has(a.id),
+    }));
+  }
+
+  async get(id: string) {
+    const announcement = await this.prisma.announcement.findUnique({
+      where: { id },
+    });
+    if (!announcement) throw new NotFoundException('Announcement not found');
+    return announcement;
+  }
+
+  async markRead(userId: string, announcementId: string) {
+    await this.get(announcementId);
+    await this.prisma.announcementRead.upsert({
+      where: { userId_announcementId: { userId, announcementId } },
+      create: { userId, announcementId },
+      update: {},
+    });
+    return { message: 'Marked as read' };
+  }
+}

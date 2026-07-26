@@ -1,0 +1,155 @@
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import * as argon2 from 'argon2';
+import * as crypto from 'crypto';
+import { PrismaService } from '../../database/prisma.service';
+import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { CompleteForceResetDto } from './dto/complete-force-reset.dto';
+
+const OTP_TTL_MS = 10 * 60 * 1000;
+const RESET_TOKEN_PURPOSE = 'password-reset';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private prisma: PrismaService,
+    private jwt: JwtService,
+  ) {}
+
+  async login(dto: LoginDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { phone: dto.phone },
+    });
+    if (!user)
+      throw new UnauthorizedException('Incorrect phone number or password.');
+
+    if (dto.role && dto.role !== user.role) {
+      throw new UnauthorizedException(
+        `This account is registered as a ${user.role === 'RESIDENT' ? 'resident' : 'security guard'}.`,
+      );
+    }
+
+    const passwordValid = await argon2.verify(user.passwordHash, dto.password);
+    if (!passwordValid)
+      throw new UnauthorizedException('Incorrect phone number or password.');
+
+    return {
+      accessToken: await this.signToken(user.id, user.role),
+      mustResetPassword: user.mustResetPassword,
+    };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { phone: dto.phone },
+    });
+    if (!user)
+      throw new UnauthorizedException(
+        'No account found for that phone number.',
+      );
+
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    await this.prisma.passwordResetOtp.create({
+      data: {
+        userId: user.id,
+        code,
+        expiresAt: new Date(Date.now() + OTP_TTL_MS),
+      },
+    });
+
+    // No SMS provider wired up: the code is echoed back for local/demo use
+    // instead of silently doing nothing. Still validated for real on verify.
+    const devOtp = process.env.NODE_ENV === 'production' ? undefined : code;
+    return { message: 'A one-time code has been sent to your phone.', devOtp };
+  }
+
+  async verifyOtp(dto: VerifyOtpDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { phone: dto.phone },
+    });
+    if (!user)
+      throw new UnauthorizedException(
+        'No account found for that phone number.',
+      );
+
+    const otp = await this.prisma.passwordResetOtp.findFirst({
+      where: {
+        userId: user.id,
+        code: dto.code,
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!otp)
+      throw new BadRequestException('That code is invalid or has expired.');
+
+    await this.prisma.passwordResetOtp.update({
+      where: { id: otp.id },
+      data: { consumedAt: new Date() },
+    });
+
+    const resetToken = await this.jwt.signAsync(
+      { sub: user.id, purpose: RESET_TOKEN_PURPOSE },
+      { secret: process.env.JWT_SECRET, expiresIn: '15m' },
+    );
+    return { resetToken };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    let payload: { sub: string; purpose: string };
+    try {
+      payload = this.jwt.verify(dto.resetToken, {
+        secret: process.env.JWT_SECRET,
+      });
+    } catch {
+      throw new UnauthorizedException(
+        'That reset link has expired. Please start again.',
+      );
+    }
+    if (payload.purpose !== RESET_TOKEN_PURPOSE) {
+      throw new UnauthorizedException('Invalid reset token.');
+    }
+
+    const passwordHash = await argon2.hash(dto.newPassword);
+    await this.prisma.user.update({
+      where: { id: payload.sub },
+      data: { passwordHash, mustResetPassword: false },
+    });
+    return { message: 'Password reset successfully.' };
+  }
+
+  async completeForceReset(userId: string, dto: CompleteForceResetDto) {
+    const passwordHash = await argon2.hash(dto.newPassword);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, mustResetPassword: false },
+    });
+    return { message: 'Password set. You can now use the app.' };
+  }
+
+  async logout(userId: string, tokenJti: string) {
+    await this.prisma.blacklistedToken.create({
+      data: {
+        tokenJti,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+    return { message: 'Logged out successfully.' };
+  }
+
+  private async signToken(userId: string, role: string) {
+    const jti = crypto.randomUUID();
+    return this.jwt.signAsync(
+      { sub: userId, role, jti },
+      { secret: process.env.JWT_SECRET, expiresIn: '7d' },
+    );
+  }
+}
