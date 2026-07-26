@@ -9,17 +9,22 @@ datasource db {
 enum Role {
   RESIDENT
   GUARD
+  ADMIN
 }
 
 model User {
-  id                String    @id @default(cuid())
-  phone             String    @unique
-  passwordHash      String
-  role              Role
-  fullName          String
-  house             String?
-  mustResetPassword Boolean   @default(false)
-  createdAt         DateTime  @default(now())
+  id                    String   @id @default(cuid())
+  phone                 String   @unique
+  passwordHash          String
+  role                  Role
+  fullName              String
+  house                 String?
+  email                 String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  vehiclePlates         String[] @default([])
+  mustResetPassword     Boolean  @default(false)
+  createdAt             DateTime @default(now())
 
   announcementReads AnnouncementRead[]
   calendarEntries   CalendarEntry[]
@@ -99,7 +104,7 @@ model AnnouncementRead {
 }
 
 model Meeting {
-  id        String   @id @default(cuid())
+  id          String   @id @default(cuid())
   title       String
   date        String
   time        String

@@ -3,7 +3,7 @@ import type { Request } from 'express';
 
 export interface AuthUser {
   sub: string;
-  role: 'RESIDENT' | 'GUARD';
+  role: 'RESIDENT' | 'GUARD' | 'ADMIN';
   jti: string;
 }
 

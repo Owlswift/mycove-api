@@ -137,7 +137,22 @@ export class AuthService {
     const passwordHash = await argon2.hash(dto.newPassword);
     await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash, mustResetPassword: false },
+      data: {
+        passwordHash,
+        mustResetPassword: false,
+        ...(dto.fullName !== undefined && { fullName: dto.fullName }),
+        ...(dto.house !== undefined && { house: dto.house }),
+        ...(dto.email !== undefined && { email: dto.email }),
+        ...(dto.emergencyContactName !== undefined && {
+          emergencyContactName: dto.emergencyContactName,
+        }),
+        ...(dto.emergencyContactPhone !== undefined && {
+          emergencyContactPhone: dto.emergencyContactPhone,
+        }),
+        ...(dto.vehiclePlates !== undefined && {
+          vehiclePlates: dto.vehiclePlates,
+        }),
+      },
     });
     return { message: 'Password set. You can now use the app.' };
   }

@@ -14,6 +14,7 @@ async function main() {
   const residentPasswordHash = await argon2.hash('estate123');
   const guardPasswordHash = await argon2.hash('guard123');
   const tempPasswordHash = await argon2.hash('temp1234');
+  const adminPasswordHash = await argon2.hash('admin123');
 
   // update: restores the demo password/flag on every reseed — otherwise
   // exercising login/reset flows during testing permanently drifts these
@@ -52,6 +53,20 @@ async function main() {
       fullName: 'New Resident',
       house: 'Block A, Flat 1',
       mustResetPassword: true,
+    },
+  });
+
+  // Bootstrap account for the admin web app — there's no self-registration,
+  // so someone has to already be an admin to create the first real one.
+  await prisma.user.upsert({
+    where: { phone: '08000000001' },
+    update: { passwordHash: adminPasswordHash, mustResetPassword: false },
+    create: {
+      phone: '08000000001',
+      passwordHash: adminPasswordHash,
+      role: 'ADMIN',
+      fullName: 'Estate Admin',
+      mustResetPassword: false,
     },
   });
 
@@ -357,6 +372,7 @@ async function main() {
   console.log('  Resident login: 08035550142 / estate123');
   console.log('  Guard login:    08052229981 / guard123');
   console.log('  Force-reset demo login: 08099990000 / temp1234');
+  console.log('  Admin login:    08000000001 / admin123');
 }
 
 main()

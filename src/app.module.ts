@@ -16,6 +16,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { RulesModule } from './modules/rules/rules.module';
 import { ComplaintsModule } from './modules/complaints/complaints.module';
 import { PushModule } from './modules/push/push.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { PushModule } from './modules/push/push.module';
     RulesModule,
     ComplaintsModule,
     PushModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

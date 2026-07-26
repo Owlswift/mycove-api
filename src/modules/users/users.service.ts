@@ -22,6 +22,10 @@ export class UsersService {
       fullName: user.fullName,
       role: user.role,
       house: user.house,
+      email: user.email,
+      emergencyContactName: user.emergencyContactName,
+      emergencyContactPhone: user.emergencyContactPhone,
+      vehiclePlates: user.vehiclePlates,
       initials,
       mustResetPassword: user.mustResetPassword,
     };
