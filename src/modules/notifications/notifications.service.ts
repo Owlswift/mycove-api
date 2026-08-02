@@ -1,13 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { PushService } from '../push/push.service';
-import { BroadcastDto } from './dto/broadcast.dto';
-
-const BROADCAST_ROLES: Record<BroadcastDto['target'], ('RESIDENT' | 'GUARD')[]> = {
-  RESIDENTS: ['RESIDENT'],
-  GUARDS: ['GUARD'],
-  ALL: ['RESIDENT', 'GUARD'],
-};
 
 @Injectable()
 export class NotificationsService {
@@ -47,23 +40,30 @@ export class NotificationsService {
     });
   }
 
-  /** An admin-initiated message to every resident/guard/both, not tied to any one user's event. */
-  async broadcast(dto: BroadcastDto) {
-    const users = await this.prisma.user.findMany({
-      where: { role: { in: BROADCAST_ROLES[dto.target] } },
+  /** Notifies every resident (in-app + push) that a new announcement was published. */
+  async notifyAnnouncement(title: string) {
+    await this.notifyAllResidents(`New announcement: ${title}`, 'announcement');
+  }
+
+  /** Notifies every resident (in-app + push) that a project has a new update. */
+  async notifyProjectUpdate(title: string) {
+    await this.notifyAllResidents(`Project update: ${title}`, 'project');
+  }
+
+  private async notifyAllResidents(message: string, type: string) {
+    const residents = await this.prisma.user.findMany({
+      where: { role: 'RESIDENT' },
       select: { id: true },
     });
-    const userIds = users.map((u) => u.id);
+    const userIds = residents.map((u) => u.id);
 
     await this.prisma.notification.createMany({
-      data: userIds.map((userId) => ({ userId, title: dto.message, type: 'broadcast' })),
+      data: userIds.map((userId) => ({ userId, title: message, type })),
     });
     await this.push.sendToUsers(userIds, {
       title: 'CommunityHub',
-      body: dto.message,
-      data: { type: 'broadcast' },
+      body: message,
+      data: { type },
     });
-
-    return { message: `Sent to ${userIds.length} recipient(s).` };
   }
 }

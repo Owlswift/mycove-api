@@ -20,40 +20,78 @@ function closesInLabel(closesAt: Date): string {
 export class PollsService {
   constructor(private prisma: PrismaService) {}
 
-  async list(userId: string) {
+  async list(userId: string, role: string) {
     const polls = await this.prisma.poll.findMany({
-      include: { options: true, votes: { where: { userId } } },
+      include: { options: true, votes: true },
     });
 
-    return polls.map((poll) => {
-      const myVote = poll.votes[0];
-      const voted = !!myVote;
-      const votesByOption = new Map(
-        poll.options.map((o) => [o.id, o.baseVotes]),
-      );
-      if (voted)
-        votesByOption.set(
-          myVote.optionId,
-          (votesByOption.get(myVote.optionId) ?? 0) + 1,
+    // Residents shouldn't see polls that closed more than 24 hours ago;
+    // admins still see everything for management.
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    return polls
+      .filter((poll) => role === 'ADMIN' || poll.closesAt > cutoff)
+      .map((poll) => {
+        const myVote = poll.votes.find((v) => v.userId === userId);
+        const voted = myVote !== undefined;
+        const votesByOption = new Map(
+          poll.options.map((o) => [o.id, o.baseVotes]),
         );
-      const total = [...votesByOption.values()].reduce((a, b) => a + b, 0);
+        for (const v of poll.votes) {
+          votesByOption.set(
+            v.optionId,
+            (votesByOption.get(v.optionId) ?? 0) + 1,
+          );
+        }
+        const total = [...votesByOption.values()].reduce((a, b) => a + b, 0);
 
-      return {
-        id: poll.id,
-        question: poll.question,
-        closesIn: closesInLabel(poll.closesAt),
-        voted,
-        voteCountLabel: `${total} ${total === 1 ? 'vote' : 'votes'}`,
-        options: poll.options.map((o) => {
-          const votes = votesByOption.get(o.id) ?? 0;
-          return {
-            id: o.id,
-            label: o.label,
-            pct: total === 0 ? 0 : Math.round((votes / total) * 100),
-          };
-        }),
-      };
+        return {
+          id: poll.id,
+          question: poll.question,
+          closesIn: closesInLabel(poll.closesAt),
+          voted,
+          selectedOptionId: myVote?.optionId ?? null,
+          voteCountLabel: `${total} ${total === 1 ? 'vote' : 'votes'}`,
+          options: poll.options.map((o) => {
+            const votes = votesByOption.get(o.id) ?? 0;
+            return {
+              id: o.id,
+              label: o.label,
+              pct: total === 0 ? 0 : Math.round((votes / total) * 100),
+            };
+          }),
+        };
+      });
+  }
+  async vote(userId: string, pollId: string, dto: VoteDto) {
+    const poll = await this.prisma.poll.findUnique({
+      where: { id: pollId },
+      include: { options: true },
     });
+    if (!poll) throw new NotFoundException('Poll not found');
+    if (poll.closesAt.getTime() <= Date.now()) {
+      throw new ConflictException('This poll has closed.');
+    }
+    if (!poll.options.some((o) => o.id === dto.optionId)) {
+      throw new NotFoundException('That option does not belong to this poll');
+    }
+
+    const existing = await this.prisma.pollVote.findUnique({
+      where: { userId_pollId: { userId, pollId } },
+    });
+    if (existing) {
+      // Active polls let residents toggle/change their response.
+      await this.prisma.pollVote.update({
+        where: { id: existing.id },
+        data: { optionId: dto.optionId },
+      });
+      return { message: 'Vote updated' };
+    }
+
+    await this.prisma.pollVote.create({
+      data: { userId, pollId, optionId: dto.optionId },
+    });
+    return { message: 'Vote recorded' };
   }
 
   create(dto: CreatePollDto) {
@@ -69,25 +107,4 @@ export class PollsService {
     });
   }
 
-  async vote(userId: string, pollId: string, dto: VoteDto) {
-    const poll = await this.prisma.poll.findUnique({
-      where: { id: pollId },
-      include: { options: true },
-    });
-    if (!poll) throw new NotFoundException('Poll not found');
-    if (!poll.options.some((o) => o.id === dto.optionId)) {
-      throw new NotFoundException('That option does not belong to this poll');
-    }
-
-    const existing = await this.prisma.pollVote.findUnique({
-      where: { userId_pollId: { userId, pollId } },
-    });
-    if (existing)
-      throw new ConflictException('You have already voted in this poll.');
-
-    await this.prisma.pollVote.create({
-      data: { userId, pollId, optionId: dto.optionId },
-    });
-    return { message: 'Vote recorded' };
-  }
 }

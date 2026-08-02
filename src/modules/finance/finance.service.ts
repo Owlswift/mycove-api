@@ -63,26 +63,37 @@ export class FinanceService {
     );
   }
 
-  /** Per-project allocated/spent/remaining only — no treasury income, safe for Project Admin. */
+  /** Per-project allocated/spent/remaining, plus resident-facing fundraising (donated/pledged) — safe for Project Admin. */
   async projectBudgets() {
     const projects = await this.prisma.project.findMany({
       select: {
         id: true,
         title: true,
+        baseRaised: true,
         allocations: { select: { amount: true } },
         invoices: { where: { status: 'APPROVED' }, select: { amount: true } },
+        donations: { select: { amount: true } },
+        pledges: { select: { amount: true, fulfilledAt: true } },
       },
     });
 
     return projects.map((p) => {
       const allocated = p.allocations.reduce((s, a) => s + a.amount, 0);
       const spent = p.invoices.reduce((s, i) => s + i.amount, 0);
+      const donated =
+        p.baseRaised + p.donations.reduce((s, d) => s + d.amount, 0);
+      // Outstanding only — a fulfilled pledge is counted in `donated` above.
+      const pledged = p.pledges
+        .filter((pl) => !pl.fulfilledAt)
+        .reduce((s, pl) => s + pl.amount, 0);
       return {
         id: p.id,
         title: p.title,
         allocated,
         spent,
         remaining: allocated - spent,
+        donated,
+        pledged,
       };
     });
   }
@@ -90,8 +101,10 @@ export class FinanceService {
   async summary() {
     const totals = await this.computeTreasuryTotals();
     const projectBreakdown = await this.projectBudgets();
+    const totalDonated = projectBreakdown.reduce((s, p) => s + p.donated, 0);
+    const totalPledged = projectBreakdown.reduce((s, p) => s + p.pledged, 0);
 
-    return { ...totals, projects: projectBreakdown };
+    return { ...totals, totalDonated, totalPledged, projects: projectBreakdown };
   }
 
   async allocate(financeSecretaryId: string, dto: AllocateFundsDto) {

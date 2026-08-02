@@ -1,13 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class AnnouncementsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
-  create(dto: CreateAnnouncementDto) {
-    return this.prisma.announcement.create({ data: dto });
+  async create(dto: CreateAnnouncementDto) {
+    const announcement = await this.prisma.announcement.create({ data: dto });
+    await this.notifications.notifyAnnouncement(announcement.title);
+    return announcement;
   }
 
   async list(userId: string) {
@@ -24,6 +30,7 @@ export class AnnouncementsService {
       id: a.id,
       title: a.title,
       category: a.category,
+      body: a.body,
       publishedAt: a.publishedAt,
       unread: !readIds.has(a.id),
     }));

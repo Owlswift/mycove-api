@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString, MinLength, ValidateIf } from 'class-validator';
 
 export class CreateUserDto {
   @IsString()
@@ -13,4 +13,10 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   house?: string;
+
+  /** Required for GUARD accounts — the admin sets a real password directly instead of a self-service reset flow. */
+  @ValidateIf((o) => o.role === 'GUARD')
+  @IsString()
+  @MinLength(6)
+  password?: string;
 }

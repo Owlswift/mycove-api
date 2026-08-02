@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
@@ -25,6 +26,8 @@ function windowLabel(createdAt: Date, validUntil: Date): string {
 
 @Injectable()
 export class VisitorPassesService {
+  private readonly logger = new Logger(VisitorPassesService.name);
+
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
@@ -80,9 +83,18 @@ export class VisitorPassesService {
 
   async verifyByCode(code: string) {
     const pass = await this.prisma.visitorPass.findUnique({ where: { code } });
-    if (!pass) return { pass: null, valid: false };
+    if (!pass) {
+      this.logger.log(`verify: code="${code}" -> no matching VisitorPass row`);
+      return { pass: null, valid: false };
+    }
     const status = statusOf(pass);
-    return { pass: { ...pass, status }, valid: status === 'ACTIVE' };
+    this.logger.log(
+      `verify: code="${code}" -> found pass id=${pass.id} name="${pass.name}" status=${status} revoked=${pass.revoked} validUntil=${pass.validUntil.toISOString()}`,
+    );
+    return {
+      pass: { ...pass, status, window: windowLabel(pass.createdAt, pass.validUntil) },
+      valid: status === 'ACTIVE',
+    };
   }
 
   async recordEntry(guardId: string, visitorPassId: string) {

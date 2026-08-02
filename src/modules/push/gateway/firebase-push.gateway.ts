@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   initializeApp,
   cert,
+  getApps,
   type App,
   type ServiceAccount,
 } from 'firebase-admin/app';
@@ -27,6 +28,15 @@ export class FirebasePushGateway implements PushGateway {
       );
       return;
     }
+    // In `nest start --watch`, this constructor reruns on every hot reload,
+    // but the Admin SDK's app registry is a module-level singleton that
+    // outlives Nest's application-context recreation within the same
+    // process — reuse the existing app instead of re-initializing into it.
+    const existingApps = getApps();
+    if (existingApps.length > 0) {
+      this.app = existingApps[0];
+      return;
+    }
     try {
       const serviceAccount = JSON.parse(serviceAccountJson) as ServiceAccount;
       this.app = initializeApp({ credential: cert(serviceAccount) });
@@ -47,12 +57,10 @@ export class FirebasePushGateway implements PushGateway {
     });
 
     if (response.failureCount > 0) {
-      const staleTokens = response.responses
-        .map((r, i) => (r.success ? null : tokens[i]))
+      const failures = response.responses
+        .map((r, i) => (r.success ? null : `${tokens[i]}: ${r.error?.code ?? 'unknown'} — ${r.error?.message ?? 'no message'}`))
         .filter((t): t is string => t !== null);
-      this.logger.warn(
-        `${response.failureCount}/${tokens.length} push sends failed (likely stale/uninstalled tokens): ${staleTokens.join(', ')}`,
-      );
+      this.logger.warn(`${response.failureCount}/${tokens.length} push sends failed:\n${failures.join('\n')}`);
     }
   }
 }

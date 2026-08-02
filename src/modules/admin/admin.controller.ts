@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -22,7 +23,7 @@ export class AdminController {
   }
 
   @Post('users/:id/reset-password')
-  resetPassword(@Param('id') id: string) {
-    return this.admin.resetPassword(id);
+  resetPassword(@Param('id') id: string, @Body() dto: ResetUserPasswordDto) {
+    return this.admin.resetPassword(id, dto.password);
   }
 }

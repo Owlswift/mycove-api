@@ -17,7 +17,7 @@ export class PollsController {
   @Get()
   @Roles('RESIDENT', 'ADMIN')
   list(@CurrentUser() user: AuthUser) {
-    return this.polls.list(user.sub);
+    return this.polls.list(user.sub, user.role);
   }
 
   @Post(':id/vote')

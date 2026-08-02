@@ -36,6 +36,7 @@ model User {
   visitorPasses      VisitorPass[]       @relation("ResidentPasses")
   guardLogEntries    AccessLogEntry[]    @relation("GuardEntries")
   projectDonations   ProjectDonation[]
+  projectPledges     ProjectPledge[]
   pollVotes          PollVote[]
   notifications      Notification[]
   complaints         Complaint[]
@@ -242,10 +243,12 @@ model Project {
   description String
   goal        Int
   baseRaised  Int
+  mediaBase64 String?
 
   budgetLines ProjectBudgetLine[]
   reports     ProjectReport[]
   donations   ProjectDonation[]
+  pledges     ProjectPledge[]
   allocations ProjectAllocation[]
   invoices    Invoice[]
 }
@@ -260,11 +263,13 @@ model ProjectBudgetLine {
 }
 
 model ProjectReport {
-  id        String @id @default(cuid())
-  projectId String
-  author    String
-  date      String
-  text      String
+  id          String   @id @default(cuid())
+  projectId   String
+  author      String
+  date        String
+  text        String
+  mediaBase64 String?
+  createdAt   DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
@@ -278,6 +283,42 @@ model ProjectDonation {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// A resident's stated intent to donate an amount, distinct from an actual
+/// ProjectDonation — lets admins see who committed to give and follow up
+/// with a personal reminder before the money actually moves.
+model ProjectPledge {
+  id          String    @id @default(cuid())
+  projectId   String
+  userId      String
+  amount      Int
+  remindedAt  DateTime?
+  fulfilledAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+enum SpotlightCategory {
+  PERSON
+  BUSINESS
+}
+
+/// A resident or local business the estate is celebrating/promoting on the
+/// mobile dashboard. Only the most recent active one is shown at a time.
+model Spotlight {
+  id          String            @id @default(cuid())
+  name        String
+  category    SpotlightCategory
+  description String
+  imageBase64 String?
+  phone       String?
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
 }
 
 /// Money the Finance Secretary has moved from the estate treasury (total

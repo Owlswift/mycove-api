@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   ConflictException,
   NotFoundException,
@@ -9,10 +10,15 @@ import { CreateUserDto } from './dto/create-user.dto';
 
 /**
  * The estate has no self-registration — an admin creates every account with
- * just the essentials, and the default password is the resident/guard's own
+ * just the essentials, and the default password is the resident's own
  * surname in caps (the last word of their full name), communicated to them
  * out-of-band (no SMS provider is wired up). They're forced to change it,
  * and complete the rest of their profile, on first login.
+ *
+ * Security guards are the exception: they share a duty phone at the gate
+ * rather than a personal device, so there's no "first login, own profile"
+ * moment to hang a self-service reset off of — the admin sets a real
+ * password directly and the guard just logs in and starts scanning.
  */
 function defaultPasswordFor(fullName: string): string {
   const surname = fullName.trim().split(/\s+/).pop();
@@ -52,8 +58,15 @@ export class AdminService {
       );
     }
 
-    const defaultPassword = defaultPasswordFor(dto.fullName);
-    const passwordHash = await argon2.hash(defaultPassword);
+    const isGuard = dto.role === 'GUARD';
+    if (isGuard && !dto.password) {
+      throw new BadRequestException(
+        'A password is required for security guard accounts.',
+      );
+    }
+
+    const passwordToUse = isGuard ? dto.password! : defaultPasswordFor(dto.fullName);
+    const passwordHash = await argon2.hash(passwordToUse);
     const user = await this.prisma.user.create({
       data: {
         phone: dto.phone,
@@ -61,7 +74,7 @@ export class AdminService {
         role: dto.role,
         house: dto.house,
         passwordHash,
-        mustResetPassword: true,
+        mustResetPassword: !isGuard,
       },
       select: {
         id: true,
@@ -71,19 +84,27 @@ export class AdminService {
         house: true,
       },
     });
-    return { ...user, defaultPassword };
+    // Guards typed their own password in — nothing to reveal back to the admin.
+    return { ...user, defaultPassword: isGuard ? null : passwordToUse };
   }
 
-  async resetPassword(userId: string) {
+  async resetPassword(userId: string, newPassword?: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
-    const defaultPassword = defaultPasswordFor(user.fullName);
-    const passwordHash = await argon2.hash(defaultPassword);
+    const isGuard = user.role === 'GUARD';
+    if (isGuard && !newPassword) {
+      throw new BadRequestException(
+        'A new password is required to reset a security guard account.',
+      );
+    }
+
+    const passwordToUse = isGuard ? newPassword! : defaultPasswordFor(user.fullName);
+    const passwordHash = await argon2.hash(passwordToUse);
     await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash, mustResetPassword: true },
+      data: { passwordHash, mustResetPassword: !isGuard },
     });
-    return { defaultPassword };
+    return { defaultPassword: isGuard ? null : passwordToUse };
   }
 }
