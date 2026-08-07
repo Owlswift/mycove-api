@@ -19,6 +19,7 @@ import { PushModule } from './modules/push/push.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { SpotlightsModule } from './modules/spotlights/spotlights.module';
+import { EstatesModule } from './modules/estates/estates.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { SpotlightsModule } from './modules/spotlights/spotlights.module';
     AdminModule,
     FinanceModule,
     SpotlightsModule,
+    EstatesModule,
   ],
 })
 export class AppModule {}

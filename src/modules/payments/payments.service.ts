@@ -19,7 +19,7 @@ export class PaymentsService {
     private notifications: NotificationsService,
   ) {}
 
-  async initiate(userId: string, dto: InitiatePaymentDto) {
+  async initiate(userId: string, estateId: string, dto: InitiatePaymentDto) {
     if (dto.purpose === 'LEVY' && !dto.levyId) {
       throw new BadRequestException('levyId is required when purpose is LEVY');
     }
@@ -28,6 +28,7 @@ export class PaymentsService {
     await this.prisma.payment.create({
       data: {
         userId,
+        estateId,
         reference,
         purpose: dto.purpose,
         levyId: dto.levyId,
@@ -61,6 +62,7 @@ export class PaymentsService {
         await tx.duesLedgerEntry.create({
           data: {
             userId,
+            estateId: payment.estateId,
             date: 'Today',
             desc: 'Dues Payment (Paystack)',
             type: 'PAYMENT',
@@ -75,7 +77,7 @@ export class PaymentsService {
       ) {
         await tx.levyPayment.upsert({
           where: { userId_levyId: { userId, levyId: payment.levyId } },
-          create: { userId, levyId: payment.levyId },
+          create: { userId, levyId: payment.levyId, estateId: payment.estateId },
           update: {},
         });
       }

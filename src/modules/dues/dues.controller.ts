@@ -19,11 +19,11 @@ export class DuesController {
 
   @Get('levies')
   listLevies(@CurrentUser() user: AuthUser) {
-    return this.dues.listLevies(user.sub);
+    return this.dues.listLevies(user.sub, user.estateId);
   }
 
   @Post('levies/:id/pay')
   payLevy(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.dues.payLevy(user.sub, id);
+    return this.dues.payLevy(user.sub, user.estateId, id);
   }
 }

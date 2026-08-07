@@ -16,22 +16,22 @@ export class AnnouncementsController {
   @Get()
   @Roles('RESIDENT', 'ADMIN')
   list(@CurrentUser() user: AuthUser) {
-    return this.announcements.list(user.sub);
+    return this.announcements.list(user.sub, user.estateId);
   }
 
   @Get(':id')
-  get(@Param('id') id: string) {
-    return this.announcements.get(id);
+  get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.announcements.get(id, user.estateId);
   }
 
   @Post(':id/read')
   markRead(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.announcements.markRead(user.sub, id);
+    return this.announcements.markRead(user.sub, user.estateId, id);
   }
 
   @Post()
   @Roles('ADMIN')
-  create(@Body() dto: CreateAnnouncementDto) {
-    return this.announcements.create(dto);
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateAnnouncementDto) {
+    return this.announcements.create(user.estateId, dto);
   }
 }

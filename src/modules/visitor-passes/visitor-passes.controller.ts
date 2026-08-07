@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { VisitorPassesService } from './visitor-passes.service';
 import { CreateVisitorPassDto } from './dto/create-visitor-pass.dto';
 import { VerifyVisitorPassDto } from './dto/verify-visitor-pass.dto';
@@ -16,42 +16,48 @@ export class VisitorPassesController {
   @Get('visitor-passes')
   @Roles('RESIDENT')
   list(@CurrentUser() user: AuthUser) {
-    return this.visitorPasses.listForResident(user.sub);
+    return this.visitorPasses.listForResident(user.sub, user.estateId);
   }
 
   @Post('visitor-passes')
   @Roles('RESIDENT')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateVisitorPassDto) {
-    return this.visitorPasses.create(user.sub, dto);
+    return this.visitorPasses.create(user.sub, user.estateId, dto);
   }
 
   @Get('visitor-passes/:id')
   @Roles('RESIDENT')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.visitorPasses.getForResident(user.sub, id);
+    return this.visitorPasses.getForResident(user.sub, user.estateId, id);
   }
 
   @Post('visitor-passes/verify')
   @Roles('GUARD')
-  verify(@Body() dto: VerifyVisitorPassDto) {
-    return this.visitorPasses.verifyByCode(dto.code);
+  verify(@CurrentUser() user: AuthUser, @Body() dto: VerifyVisitorPassDto) {
+    return this.visitorPasses.verifyByCode(user.estateId, dto.code);
+  }
+
+  @Patch('visitor-passes/:id/revoke')
+  @Roles('RESIDENT')
+  revoke(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.visitorPasses.revoke(user.sub, user.estateId, id);
   }
 
   @Post('visitor-passes/:id/entry')
   @Roles('GUARD')
   recordEntry(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.visitorPasses.recordEntry(user.sub, id);
+    return this.visitorPasses.recordEntry(user.sub, user.estateId, id);
   }
 
   @Post('visitor-passes/:id/exit')
   @Roles('GUARD')
   recordExit(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.visitorPasses.recordExit(user.sub, id);
+    return this.visitorPasses.recordExit(user.sub, user.estateId, id);
   }
 
   @Get('access-log')
   @Roles('GUARD', 'ADMIN')
-  accessLog() {
-    return this.visitorPasses.accessLog();
+  accessLog(@CurrentUser() user: AuthUser) {
+    return this.visitorPasses.accessLog(user.estateId);
   }
 }

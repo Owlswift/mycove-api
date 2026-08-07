@@ -13,7 +13,7 @@ export class PushController {
 
   @Post('register-token')
   register(@CurrentUser() user: AuthUser, @Body() dto: RegisterDeviceTokenDto) {
-    return this.push.registerToken(user.sub, dto.token, dto.platform);
+    return this.push.registerToken(user.sub, user.estateId, dto.token, dto.platform);
   }
 
   @Post('unregister-token')

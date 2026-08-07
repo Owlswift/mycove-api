@@ -6,21 +6,22 @@ import { CreateSpotlightDto } from './dto/create-spotlight.dto';
 export class SpotlightsService {
   constructor(private prisma: PrismaService) {}
 
-  list() {
-    return this.prisma.spotlight.findMany({ orderBy: { createdAt: 'desc' } });
+  list(estateId: string) {
+    return this.prisma.spotlight.findMany({ where: { estateId }, orderBy: { createdAt: 'desc' } });
   }
 
   /** The single spotlight shown on the resident dashboard — most recently created active one, if any. */
-  current() {
+  current(estateId: string) {
     return this.prisma.spotlight.findFirst({
-      where: { active: true },
+      where: { estateId, active: true },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  create(dto: CreateSpotlightDto) {
+  create(estateId: string, dto: CreateSpotlightDto) {
     return this.prisma.spotlight.create({
       data: {
+        estateId,
         name: dto.name,
         category: dto.category,
         description: dto.description,
@@ -30,8 +31,8 @@ export class SpotlightsService {
     });
   }
 
-  async toggle(id: string) {
-    const spotlight = await this.prisma.spotlight.findUnique({ where: { id } });
+  async toggle(estateId: string, id: string) {
+    const spotlight = await this.prisma.spotlight.findFirst({ where: { id, estateId } });
     if (!spotlight) throw new NotFoundException('Spotlight not found');
     return this.prisma.spotlight.update({
       where: { id },
@@ -39,8 +40,8 @@ export class SpotlightsService {
     });
   }
 
-  async remove(id: string) {
-    const spotlight = await this.prisma.spotlight.findUnique({ where: { id } });
+  async remove(estateId: string, id: string) {
+    const spotlight = await this.prisma.spotlight.findFirst({ where: { id, estateId } });
     if (!spotlight) throw new NotFoundException('Spotlight not found');
     await this.prisma.spotlight.delete({ where: { id } });
     return { message: 'Spotlight removed' };

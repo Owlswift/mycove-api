@@ -14,8 +14,9 @@ function daysAwayLabel(scheduledAt: Date): string {
 export class MeetingsService {
   constructor(private prisma: PrismaService) {}
 
-  async list() {
+  async list(estateId: string) {
     const meetings = await this.prisma.meeting.findMany({
+      where: { estateId },
       orderBy: { scheduledAt: 'asc' },
     });
     return meetings.map((m) => ({
@@ -28,8 +29,8 @@ export class MeetingsService {
     }));
   }
 
-  async get(userId: string, id: string) {
-    const meeting = await this.prisma.meeting.findUnique({ where: { id } });
+  async get(userId: string, estateId: string, id: string) {
+    const meeting = await this.prisma.meeting.findFirst({ where: { id, estateId } });
     if (!meeting) throw new NotFoundException('Meeting not found');
     const calendarEntry = await this.prisma.calendarEntry.findUnique({
       where: { userId_meetingId: { userId, meetingId: id } },
@@ -41,16 +42,78 @@ export class MeetingsService {
     };
   }
 
-  async addToCalendar(userId: string, meetingId: string) {
-    const meeting = await this.prisma.meeting.findUnique({
-      where: { id: meetingId },
+  async addToCalendar(userId: string, estateId: string, meetingId: string) {
+    const meeting = await this.prisma.meeting.findFirst({
+      where: { id: meetingId, estateId },
     });
     if (!meeting) throw new NotFoundException('Meeting not found');
     await this.prisma.calendarEntry.upsert({
       where: { userId_meetingId: { userId, meetingId } },
-      create: { userId, meetingId },
+      create: { userId, meetingId, estateId: meeting.estateId },
       update: {},
     });
-    return { message: 'Added to device calendar' };
+    return {
+      message: 'Added to device calendar',
+      meeting: {
+        title: meeting.title,
+        date: meeting.date,
+        time: meeting.time,
+        location: meeting.location,
+      },
+    };
+  }
+
+  async adminList(estateId: string) {
+    const meetings = await this.prisma.meeting.findMany({
+      where: { estateId },
+      orderBy: { scheduledAt: 'asc' },
+    });
+    return meetings.map((m) => ({
+      id: m.id,
+      title: m.title,
+      date: m.date,
+      time: m.time,
+      location: m.location,
+      agenda: m.agenda,
+    }));
+  }
+
+  async adminCreate(estateId: string, data: { title: string; date: string; time: string; location: string; agenda: string[] }) {
+    const meeting = await this.prisma.meeting.create({
+      data: {
+        estateId,
+        title: data.title,
+        date: data.date,
+        time: data.time,
+        location: data.location,
+        scheduledAt: new Date(`${data.date} ${data.time}`),
+        agenda: data.agenda,
+      },
+    });
+    return meeting;
+  }
+
+  async adminUpdate(estateId: string, id: string, data: { title: string; date: string; time: string; location: string; agenda: string[] }) {
+    const meeting = await this.prisma.meeting.findFirst({ where: { id, estateId } });
+    if (!meeting) throw new NotFoundException('Meeting not found');
+
+    const updated = await this.prisma.meeting.update({
+      where: { id },
+      data: {
+        title: data.title,
+        date: data.date,
+        time: data.time,
+        location: data.location,
+        scheduledAt: new Date(`${data.date} ${data.time}`),
+        agenda: data.agenda,
+      },
+    });
+    return updated;
+  }
+
+  async adminDelete(estateId: string, id: string) {
+    const meeting = await this.prisma.meeting.findFirst({ where: { id, estateId } });
+    if (!meeting) throw new NotFoundException('Meeting not found');
+    await this.prisma.meeting.delete({ where: { id } });
   }
 }

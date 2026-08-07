@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsPositive, IsString, MinLength } from 'class-validator';
+import { IsInt, IsOptional, IsPositive, IsString, Matches, MinLength } from 'class-validator';
 
 export class CreateInvoiceDto {
   @IsString()
@@ -15,4 +15,9 @@ export class CreateInvoiceDto {
   @IsOptional()
   @IsString()
   vendor?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^data:(image|video)\//, { message: 'mediaBase64 must be an image or video data URL' })
+  mediaBase64?: string;
 }

@@ -15,7 +15,7 @@ export class PaymentsController {
 
   @Post('initiate')
   initiate(@CurrentUser() user: AuthUser, @Body() dto: InitiatePaymentDto) {
-    return this.payments.initiate(user.sub, dto);
+    return this.payments.initiate(user.sub, user.estateId, dto);
   }
 
   @Get('verify/:reference')

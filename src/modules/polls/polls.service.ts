@@ -20,8 +20,9 @@ function closesInLabel(closesAt: Date): string {
 export class PollsService {
   constructor(private prisma: PrismaService) {}
 
-  async list(userId: string, role: string) {
+  async list(userId: string, estateId: string, role: string) {
     const polls = await this.prisma.poll.findMany({
+      where: { estateId },
       include: { options: true, votes: true },
     });
 
@@ -63,9 +64,9 @@ export class PollsService {
         };
       });
   }
-  async vote(userId: string, pollId: string, dto: VoteDto) {
-    const poll = await this.prisma.poll.findUnique({
-      where: { id: pollId },
+  async vote(userId: string, estateId: string, pollId: string, dto: VoteDto) {
+    const poll = await this.prisma.poll.findFirst({
+      where: { id: pollId, estateId },
       include: { options: true },
     });
     if (!poll) throw new NotFoundException('Poll not found');
@@ -89,18 +90,19 @@ export class PollsService {
     }
 
     await this.prisma.pollVote.create({
-      data: { userId, pollId, optionId: dto.optionId },
+      data: { userId, pollId, optionId: dto.optionId, estateId: poll.estateId },
     });
     return { message: 'Vote recorded' };
   }
 
-  create(dto: CreatePollDto) {
+  create(estateId: string, dto: CreatePollDto) {
     return this.prisma.poll.create({
       data: {
+        estateId,
         question: dto.question,
         closesAt: new Date(Date.now() + dto.closesInDays * 24 * 60 * 60 * 1000),
         options: {
-          create: dto.options.map((label) => ({ label, baseVotes: 0 })),
+          create: dto.options.map((label) => ({ label, baseVotes: 0, estateId })),
         },
       },
       include: { options: true },

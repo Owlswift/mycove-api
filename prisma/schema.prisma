@@ -14,8 +14,51 @@ enum Role {
   PROJECT_ADMIN
 }
 
+/// A registry of estates. Every other model in this schema carries its own
+/// estateId — a flat, denormalized tenant column on every row rather than
+/// relying on join-through from a parent — so every query can filter with a
+/// single `WHERE estateId = ...` and it's structurally hard to accidentally
+/// leak one estate's data into another's request.
+model Estate {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  users              User[]
+  deviceTokens       DeviceToken[]
+  passwordResetOtps  PasswordResetOtp[]
+  announcements      Announcement[]
+  announcementReads  AnnouncementRead[]
+  meetings           Meeting[]
+  calendarEntries    CalendarEntry[]
+  duesLedgerEntries  DuesLedgerEntry[]
+  duesSettings       DuesSettings?
+  levies             Levy[]
+  levyPayments       LevyPayment[]
+  payments           Payment[]
+  visitorPasses      VisitorPass[]
+  accessLogEntries   AccessLogEntry[]
+  projects           Project[]
+  projectBudgetLines ProjectBudgetLine[]
+  projectReports     ProjectReport[]
+  projectDonations   ProjectDonation[]
+  projectPledges     ProjectPledge[]
+  spotlights         Spotlight[]
+  projectAllocations ProjectAllocation[]
+  invoices           Invoice[]
+  polls              Poll[]
+  pollOptions        PollOption[]
+  pollVotes          PollVote[]
+  notifications      Notification[]
+  rulesSections      RulesSection[]
+  ruleItems          RuleItem[]
+  complaints         Complaint[]
+}
+
 model User {
   id                    String   @id @default(cuid())
+  estateId              String
   phone                 String   @unique
   passwordHash          String
   role                  Role
@@ -26,8 +69,10 @@ model User {
   emergencyContactPhone String?
   vehiclePlates         String[] @default([])
   mustResetPassword     Boolean  @default(false)
+  active                Boolean  @default(true)
   createdAt             DateTime @default(now())
 
+  estate             Estate               @relation(fields: [estateId], references: [id], onDelete: Cascade)
   announcementReads  AnnouncementRead[]
   calendarEntries    CalendarEntry[]
   duesLedgerEntries  DuesLedgerEntry[]
@@ -45,6 +90,8 @@ model User {
   projectAllocations ProjectAllocation[] @relation("AllocatedBy")
   invoicesRaised     Invoice[]           @relation("InvoiceRaisedBy")
   invoicesReviewed   Invoice[]           @relation("InvoiceReviewedBy")
+
+  @@index([estateId])
 }
 
 enum DevicePlatform {
@@ -54,27 +101,33 @@ enum DevicePlatform {
 
 model DeviceToken {
   id        String         @id @default(cuid())
+  estateId  String
   userId    String
   token     String         @unique
   platform  DevicePlatform
   createdAt DateTime       @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([estateId])
 }
 
 model PasswordResetOtp {
   id         String    @id @default(cuid())
+  estateId   String
   userId     String
   code       String
   expiresAt  DateTime
   consumedAt DateTime?
   createdAt  DateTime  @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([estateId])
 }
 
 model BlacklistedToken {
@@ -89,28 +142,36 @@ model BlacklistedToken {
 
 model Announcement {
   id          String   @id @default(cuid())
+  estateId    String
   title       String
   category    String
   body        String
   publishedAt DateTime @default(now())
 
-  reads AnnouncementRead[]
+  estate Estate             @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  reads  AnnouncementRead[]
+
+  @@index([estateId])
 }
 
 model AnnouncementRead {
   id             String   @id @default(cuid())
+  estateId       String
   userId         String
   announcementId String
   readAt         DateTime @default(now())
 
+  estate       Estate       @relation(fields: [estateId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
 
   @@unique([userId, announcementId])
+  @@index([estateId])
 }
 
 model Meeting {
   id          String   @id @default(cuid())
+  estateId    String
   title       String
   date        String
   time        String
@@ -119,19 +180,25 @@ model Meeting {
   scheduledAt DateTime
   createdAt   DateTime @default(now())
 
+  estate          Estate          @relation(fields: [estateId], references: [id], onDelete: Cascade)
   calendarEntries CalendarEntry[]
+
+  @@index([estateId])
 }
 
 model CalendarEntry {
   id        String   @id @default(cuid())
+  estateId  String
   userId    String
   meetingId String
   addedAt   DateTime @default(now())
 
+  estate  Estate  @relation(fields: [estateId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
 
   @@unique([userId, meetingId])
+  @@index([estateId])
 }
 
 enum DuesEntryType {
@@ -140,38 +207,63 @@ enum DuesEntryType {
 }
 
 model DuesLedgerEntry {
-  id        String        @id @default(cuid())
-  userId    String
-  date      String
-  desc      String
-  type      DuesEntryType
-  amount    Int
-  createdAt DateTime      @default(now())
+  id          String        @id @default(cuid())
+  estateId    String
+  userId      String
+  date        String
+  desc        String
+  type        DuesEntryType
+  amount      Int
+  mediaBase64 String?
+  createdAt   DateTime      @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([estateId])
+}
+
+/// One row per estate (estateId is unique) — the monthly dues rate Finance
+/// Secretary sets from the dashboard. Dues accrual reads this rather than a
+/// hardcoded amount.
+model DuesSettings {
+  id            String @id @default(cuid())
+  estateId      String @unique
+  monthlyAmount Int    @default(45000)
+
+  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
 }
 
 model Levy {
-  id      String @id @default(cuid())
-  label   String
-  amount  Int
-  dueDate String
+  id       String @id @default(cuid())
+  estateId String
+  label    String
+  amount   Int
+  dueDate  String
+  year     Int    @default(2026)
 
+  estate   Estate        @relation(fields: [estateId], references: [id], onDelete: Cascade)
   payments LevyPayment[]
+
+  @@index([year])
+  @@index([estateId])
 }
 
 model LevyPayment {
-  id     String   @id @default(cuid())
-  userId String
-  levyId String
-  paidAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  estateId    String
+  userId      String
+  levyId      String
+  mediaBase64 String?
+  paidAt      DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  levy Levy @relation(fields: [levyId], references: [id], onDelete: Cascade)
+  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  levy   Levy   @relation(fields: [levyId], references: [id], onDelete: Cascade)
 
   @@unique([userId, levyId])
+  @@index([estateId])
 }
 
 enum PaymentPurpose {
@@ -187,6 +279,7 @@ enum PaymentStatus {
 
 model Payment {
   id        String         @id @default(cuid())
+  estateId  String
   userId    String
   reference String         @unique
   purpose   PaymentPurpose
@@ -195,13 +288,16 @@ model Payment {
   status    PaymentStatus  @default(PENDING)
   createdAt DateTime       @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([estateId])
 }
 
 model VisitorPass {
   id         String   @id @default(cuid())
+  estateId   String
   residentId String
   name       String
   phone      String
@@ -211,23 +307,28 @@ model VisitorPass {
   revoked    Boolean  @default(false)
   createdAt  DateTime @default(now())
 
+  estate           Estate           @relation(fields: [estateId], references: [id], onDelete: Cascade)
   resident         User             @relation("ResidentPasses", fields: [residentId], references: [id], onDelete: Cascade)
   accessLogEntries AccessLogEntry[]
 
   @@index([residentId])
+  @@index([estateId])
 }
 
 model AccessLogEntry {
   id            String    @id @default(cuid())
+  estateId      String
   visitorPassId String
   guardId       String
   entryAt       DateTime  @default(now())
   exitAt        DateTime?
 
+  estate      Estate      @relation(fields: [estateId], references: [id], onDelete: Cascade)
   visitorPass VisitorPass @relation(fields: [visitorPassId], references: [id], onDelete: Cascade)
   guard       User        @relation("GuardEntries", fields: [guardId], references: [id], onDelete: Cascade)
 
   @@index([visitorPassId])
+  @@index([estateId])
 }
 
 enum ProjectStatus {
@@ -237,6 +338,7 @@ enum ProjectStatus {
 
 model Project {
   id          String        @id @default(cuid())
+  estateId    String
   title       String
   status      ProjectStatus
   progress    Int
@@ -245,25 +347,33 @@ model Project {
   baseRaised  Int
   mediaBase64 String?
 
+  estate      Estate              @relation(fields: [estateId], references: [id], onDelete: Cascade)
   budgetLines ProjectBudgetLine[]
   reports     ProjectReport[]
   donations   ProjectDonation[]
   pledges     ProjectPledge[]
   allocations ProjectAllocation[]
   invoices    Invoice[]
+
+  @@index([estateId])
 }
 
 model ProjectBudgetLine {
   id        String @id @default(cuid())
+  estateId  String
   projectId String
   label     String
   amount    Int
 
+  estate  Estate  @relation(fields: [estateId], references: [id], onDelete: Cascade)
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([estateId])
 }
 
 model ProjectReport {
   id          String   @id @default(cuid())
+  estateId    String
   projectId   String
   author      String
   date        String
@@ -271,18 +381,25 @@ model ProjectReport {
   mediaBase64 String?
   createdAt   DateTime @default(now())
 
+  estate  Estate  @relation(fields: [estateId], references: [id], onDelete: Cascade)
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([estateId])
 }
 
 model ProjectDonation {
   id        String   @id @default(cuid())
+  estateId  String
   projectId String
   userId    String
   amount    Int
   createdAt DateTime @default(now())
 
+  estate  Estate  @relation(fields: [estateId], references: [id], onDelete: Cascade)
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([estateId])
 }
 
 /// A resident's stated intent to donate an amount, distinct from an actual
@@ -290,6 +407,7 @@ model ProjectDonation {
 /// with a personal reminder before the money actually moves.
 model ProjectPledge {
   id          String    @id @default(cuid())
+  estateId    String
   projectId   String
   userId      String
   amount      Int
@@ -297,10 +415,12 @@ model ProjectPledge {
   fulfilledAt DateTime?
   createdAt   DateTime  @default(now())
 
+  estate  Estate  @relation(fields: [estateId], references: [id], onDelete: Cascade)
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+  @@index([estateId])
 }
 
 enum SpotlightCategory {
@@ -312,6 +432,7 @@ enum SpotlightCategory {
 /// mobile dashboard. Only the most recent active one is shown at a time.
 model Spotlight {
   id          String            @id @default(cuid())
+  estateId    String
   name        String
   category    SpotlightCategory
   description String
@@ -319,6 +440,10 @@ model Spotlight {
   phone       String?
   active      Boolean           @default(true)
   createdAt   DateTime          @default(now())
+
+  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+
+  @@index([estateId])
 }
 
 /// Money the Finance Secretary has moved from the estate treasury (total
@@ -329,16 +454,19 @@ model Spotlight {
 /// bugs this session did.
 model ProjectAllocation {
   id            String   @id @default(cuid())
+  estateId      String
   projectId     String
   amount        Int
   allocatedById String
   note          String?
   createdAt     DateTime @default(now())
 
+  estate      Estate  @relation(fields: [estateId], references: [id], onDelete: Cascade)
   project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   allocatedBy User    @relation("AllocatedBy", fields: [allocatedById], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+  @@index([estateId])
 }
 
 enum InvoiceStatus {
@@ -353,84 +481,110 @@ enum InvoiceStatus {
 /// sum(approved invoices)), rejecting one has no financial effect.
 model Invoice {
   id           String        @id @default(cuid())
+  estateId     String
   projectId    String
   amount       Int
   description  String
   vendor       String?
+  mediaBase64  String?
   status       InvoiceStatus @default(PENDING)
   raisedById   String
   reviewedById String?
   reviewedAt   DateTime?
   createdAt    DateTime      @default(now())
 
+  estate     Estate  @relation(fields: [estateId], references: [id], onDelete: Cascade)
   project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   raisedBy   User    @relation("InvoiceRaisedBy", fields: [raisedById], references: [id], onDelete: Cascade)
   reviewedBy User?   @relation("InvoiceReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
 
   @@index([projectId])
+  @@index([estateId])
 }
 
 model Poll {
   id       String   @id @default(cuid())
+  estateId String
   question String
   closesAt DateTime
 
+  estate  Estate       @relation(fields: [estateId], references: [id], onDelete: Cascade)
   options PollOption[]
   votes   PollVote[]
+
+  @@index([estateId])
 }
 
 model PollOption {
   id        String @id @default(cuid())
+  estateId  String
   pollId    String
   label     String
   baseVotes Int
 
-  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
-  votes PollVote[]
+  estate Estate     @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes  PollVote[]
+
+  @@index([estateId])
 }
 
 model PollVote {
   id       String   @id @default(cuid())
+  estateId String
   userId   String
   pollId   String
   optionId String
   votedAt  DateTime @default(now())
 
+  estate Estate     @relation(fields: [estateId], references: [id], onDelete: Cascade)
   user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
   option PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
 
   @@unique([userId, pollId])
+  @@index([estateId])
 }
 
 model Notification {
   id        String    @id @default(cuid())
+  estateId  String
   userId    String
   title     String
   type      String
   createdAt DateTime  @default(now())
   readAt    DateTime?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([estateId])
 }
 
 model RulesSection {
-  id    String @id @default(cuid())
-  title String
-  order Int
+  id       String @id @default(cuid())
+  estateId String
+  title    String
+  order    Int
 
-  items RuleItem[]
+  estate Estate     @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  items  RuleItem[]
+
+  @@index([estateId])
 }
 
 model RuleItem {
   id        String @id @default(cuid())
+  estateId  String
   sectionId String
   text      String
   order     Int
 
+  estate  Estate       @relation(fields: [estateId], references: [id], onDelete: Cascade)
   section RulesSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([estateId])
 }
 
 enum ComplaintStatus {
@@ -441,6 +595,7 @@ enum ComplaintStatus {
 
 model Complaint {
   id          String          @id @default(cuid())
+  estateId    String
   userId      String
   category    String
   description String
@@ -448,7 +603,9 @@ model Complaint {
   status      ComplaintStatus @default(SUBMITTED)
   createdAt   DateTime        @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([estateId])
 }

@@ -57,8 +57,15 @@ export class AuthService {
     if (!passwordValid)
       throw new UnauthorizedException('Incorrect phone number or password.');
 
+    if (!user.active) {
+      throw new UnauthorizedException({
+        message: 'This account has been deactivated. Contact your estate admin.',
+        code: 'ACCOUNT_DEACTIVATED',
+      });
+    }
+
     return {
-      accessToken: await this.signAccessToken(user.id, user.role),
+      accessToken: await this.signAccessToken(user.id, user.role, user.estateId),
       refreshToken: await this.signRefreshToken(user.id),
       mustResetPassword: user.mustResetPassword,
     };
@@ -72,11 +79,18 @@ export class AuthService {
       throw new UnauthorizedException(
         'No account found for that phone number.',
       );
+    if (!user.active) {
+      throw new UnauthorizedException({
+        message: 'This account has been deactivated. Contact your estate admin.',
+        code: 'ACCOUNT_DEACTIVATED',
+      });
+    }
 
     const code = String(Math.floor(1000 + Math.random() * 9000));
     await this.prisma.passwordResetOtp.create({
       data: {
         userId: user.id,
+        estateId: user.estateId,
         code,
         expiresAt: new Date(Date.now() + OTP_TTL_MS),
       },
@@ -200,11 +214,17 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Session expired. Please log in again.');
     }
+    if (!user.active) {
+      throw new UnauthorizedException({
+        message: 'This account has been deactivated. Contact your estate admin.',
+        code: 'ACCOUNT_DEACTIVATED',
+      });
+    }
 
     await this.blacklist(payload.jti, REFRESH_TOKEN_TTL_MS);
 
     return {
-      accessToken: await this.signAccessToken(user.id, user.role),
+      accessToken: await this.signAccessToken(user.id, user.role, user.estateId),
       refreshToken: await this.signRefreshToken(user.id),
     };
   }
@@ -226,10 +246,10 @@ export class AuthService {
     return { message: 'Logged out successfully.' };
   }
 
-  private async signAccessToken(userId: string, role: string) {
+  private async signAccessToken(userId: string, role: string, estateId: string) {
     const jti = crypto.randomUUID();
     return this.jwt.signAsync(
-      { sub: userId, role, jti },
+      { sub: userId, role, estateId, jti },
       { secret: process.env.JWT_SECRET, expiresIn: ACCESS_TOKEN_TTL },
     );
   }

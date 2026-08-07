@@ -30,8 +30,12 @@ export class NotificationsService {
    * (visitor-pass entry/exit, payment success) only need this one method.
    */
   async create(userId: string, message: string, type: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { estateId: true },
+    });
     await this.prisma.notification.create({
-      data: { userId, title: message, type },
+      data: { userId, estateId: user.estateId, title: message, type },
     });
     await this.push.sendToUser(userId, {
       title: 'CommunityHub',
@@ -41,24 +45,24 @@ export class NotificationsService {
   }
 
   /** Notifies every resident (in-app + push) that a new announcement was published. */
-  async notifyAnnouncement(title: string) {
-    await this.notifyAllResidents(`New announcement: ${title}`, 'announcement');
+  async notifyAnnouncement(estateId: string, title: string) {
+    await this.notifyAllResidents(estateId, `New announcement: ${title}`, 'announcement');
   }
 
   /** Notifies every resident (in-app + push) that a project has a new update. */
-  async notifyProjectUpdate(title: string) {
-    await this.notifyAllResidents(`Project update: ${title}`, 'project');
+  async notifyProjectUpdate(estateId: string, title: string) {
+    await this.notifyAllResidents(estateId, `Project update: ${title}`, 'project');
   }
 
-  private async notifyAllResidents(message: string, type: string) {
+  private async notifyAllResidents(estateId: string, message: string, type: string) {
     const residents = await this.prisma.user.findMany({
-      where: { role: 'RESIDENT' },
+      where: { role: 'RESIDENT', estateId, active: true },
       select: { id: true },
     });
     const userIds = residents.map((u) => u.id);
 
     await this.prisma.notification.createMany({
-      data: userIds.map((userId) => ({ userId, title: message, type })),
+      data: userIds.map((userId) => ({ userId, estateId, title: message, type })),
     });
     await this.push.sendToUsers(userIds, {
       title: 'CommunityHub',

@@ -27,23 +27,35 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('No token provided');
     }
 
+    let payload: AuthUser;
     try {
-      const payload = this.jwt.verify<AuthUser>(token, {
+      payload = this.jwt.verify<AuthUser>(token, {
         secret: process.env.JWT_SECRET,
       });
-
-      const blacklisted = await this.prisma.blacklistedToken.findUnique({
-        where: { tokenJti: payload.jti },
-      });
-      if (blacklisted) {
-        throw new UnauthorizedException('Token has been revoked');
-      }
-
-      request.user = payload;
-      return true;
     } catch {
       throw new UnauthorizedException('Invalid token');
     }
+
+    const blacklisted = await this.prisma.blacklistedToken.findUnique({
+      where: { tokenJti: payload.jti },
+    });
+    if (blacklisted) {
+      throw new UnauthorizedException('Token has been revoked');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { active: true },
+    });
+    if (!user || !user.active) {
+      throw new UnauthorizedException({
+        message: 'This account has been deactivated. Contact your estate admin.',
+        code: 'ACCOUNT_DEACTIVATED',
+      });
+    }
+
+    request.user = payload;
+    return true;
   }
 
   private extractToken(request: Request): string | undefined {

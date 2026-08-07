@@ -11,6 +11,13 @@ const prisma = new PrismaClient({ adapter });
 // lib/data/mock_data.dart, which itself mirrors the original CommunityHub.dc.html
 // design mockup.
 async function main() {
+  const estate = await prisma.estate.upsert({
+    where: { code: 'PALM001' },
+    update: {},
+    create: { code: 'PALM001', name: 'Palm Court Estate' },
+  });
+  const estateId = estate.id;
+
   const residentPasswordHash = await argon2.hash('estate123');
   const guardPasswordHash = await argon2.hash('guard123');
   const tempPasswordHash = await argon2.hash('temp1234');
@@ -25,6 +32,7 @@ async function main() {
     where: { phone: '08035550142' },
     update: { passwordHash: residentPasswordHash, mustResetPassword: false },
     create: {
+      estateId,
       phone: '08035550142',
       passwordHash: residentPasswordHash,
       role: 'RESIDENT',
@@ -37,6 +45,7 @@ async function main() {
     where: { phone: '08052229981' },
     update: { passwordHash: guardPasswordHash },
     create: {
+      estateId,
       phone: '08052229981',
       passwordHash: guardPasswordHash,
       role: 'GUARD',
@@ -49,6 +58,7 @@ async function main() {
     where: { phone: '08099990000' },
     update: { passwordHash: tempPasswordHash, mustResetPassword: true },
     create: {
+      estateId,
       phone: '08099990000',
       passwordHash: tempPasswordHash,
       role: 'RESIDENT',
@@ -64,6 +74,7 @@ async function main() {
     where: { phone: '08000000001' },
     update: { passwordHash: adminPasswordHash, mustResetPassword: false },
     create: {
+      estateId,
       phone: '08000000001',
       passwordHash: adminPasswordHash,
       role: 'ADMIN',
@@ -76,6 +87,7 @@ async function main() {
     where: { phone: '08000000002' },
     update: { passwordHash: financePasswordHash, mustResetPassword: false },
     create: {
+      estateId,
       phone: '08000000002',
       passwordHash: financePasswordHash,
       role: 'FINANCE_SECRETARY',
@@ -88,6 +100,7 @@ async function main() {
     where: { phone: '08000000003' },
     update: { passwordHash: projectAdminPasswordHash, mustResetPassword: false },
     create: {
+      estateId,
       phone: '08000000003',
       passwordHash: projectAdminPasswordHash,
       role: 'PROJECT_ADMIN',
@@ -123,7 +136,7 @@ async function main() {
     },
   ];
   for (const a of announcements) {
-    await prisma.announcement.upsert({ where: { id: a.id }, update: {}, create: a });
+    await prisma.announcement.upsert({ where: { id: a.id }, update: {}, create: { ...a, estateId } });
   }
 
   const now = Date.now();
@@ -149,7 +162,7 @@ async function main() {
     },
   ];
   for (const m of meetings) {
-    await prisma.meeting.upsert({ where: { id: m.id }, update: {}, create: m });
+    await prisma.meeting.upsert({ where: { id: m.id }, update: {}, create: { ...m, estateId } });
   }
 
   const projects = [
@@ -218,14 +231,14 @@ async function main() {
   ];
   for (const p of projects) {
     const { budget, reports, ...projectData } = p;
-    await prisma.project.upsert({ where: { id: p.id }, update: {}, create: projectData });
+    await prisma.project.upsert({ where: { id: p.id }, update: {}, create: { ...projectData, estateId } });
     await prisma.projectBudgetLine.deleteMany({ where: { projectId: p.id } });
     await prisma.projectReport.deleteMany({ where: { projectId: p.id } });
     await prisma.projectBudgetLine.createMany({
-      data: budget.map((b) => ({ ...b, projectId: p.id })),
+      data: budget.map((b) => ({ ...b, projectId: p.id, estateId })),
     });
     await prisma.projectReport.createMany({
-      data: reports.map((r) => ({ ...r, projectId: p.id })),
+      data: reports.map((r) => ({ ...r, projectId: p.id, estateId })),
     });
   }
 
@@ -254,7 +267,7 @@ async function main() {
   ];
   await prisma.notification.deleteMany({ where: { userId: resident.id } });
   await prisma.notification.createMany({
-    data: notifications.map((n) => ({ ...n, userId: resident.id })),
+    data: notifications.map((n) => ({ ...n, userId: resident.id, estateId })),
   });
 
   const polls = [
@@ -281,10 +294,10 @@ async function main() {
   ];
   for (const p of polls) {
     const { options, ...pollData } = p;
-    await prisma.poll.upsert({ where: { id: p.id }, update: {}, create: pollData });
+    await prisma.poll.upsert({ where: { id: p.id }, update: {}, create: { ...pollData, estateId } });
     const existingOptions = await prisma.pollOption.findMany({ where: { pollId: p.id } });
     if (existingOptions.length === 0) {
-      await prisma.pollOption.createMany({ data: options.map((o) => ({ ...o, pollId: p.id })) });
+      await prisma.pollOption.createMany({ data: options.map((o) => ({ ...o, pollId: p.id, estateId })) });
     }
   }
   // Reset so the demo resident always starts able to vote — otherwise a
@@ -325,37 +338,44 @@ async function main() {
   if (existingSections.length === 0) {
     for (let i = 0; i < rulesSections.length; i++) {
       const section = await prisma.rulesSection.create({
-        data: { title: rulesSections[i].title, order: i },
+        data: { title: rulesSections[i].title, order: i, estateId },
       });
       await prisma.ruleItem.createMany({
-        data: rulesSections[i].items.map((text, j) => ({ sectionId: section.id, text, order: j })),
+        data: rulesSections[i].items.map((text, j) => ({ sectionId: section.id, text, order: j, estateId })),
       });
     }
   }
 
+  await prisma.duesSettings.upsert({
+    where: { estateId },
+    update: {},
+    create: { estateId, monthlyAmount: 45000 },
+  });
+
+  // Dues charges are computed on the fly from the calendar (see
+  // computeDuesAccrual in dues.service.ts) rather than stored — only real
+  // payments live in this ledger.
   const duesHistory = [
-    { date: '1 Jul', desc: 'July Service Charge', type: 'CHARGE' as const, amount: 45000 },
-    { date: '3 Jun', desc: 'Payment Received', type: 'PAYMENT' as const, amount: 45000 },
-    { date: '1 Jun', desc: 'June Service Charge', type: 'CHARGE' as const, amount: 45000 },
+    { date: '3 Jun', desc: 'Dues Payment Received', type: 'PAYMENT' as const, amount: 45000 },
   ];
   await prisma.duesLedgerEntry.deleteMany({ where: { userId: resident.id } });
   await prisma.duesLedgerEntry.createMany({
-    data: duesHistory.map((d) => ({ ...d, userId: resident.id })),
+    data: duesHistory.map((d) => ({ ...d, userId: resident.id, estateId })),
   });
 
   const levies = [
-    { id: 'lv1', label: 'Christmas Decoration Levy', amount: 8000, dueDate: '15 Dec', paid: false },
-    { id: 'lv2', label: 'Security Upgrade Levy', amount: 15000, dueDate: '30 Jul', paid: false },
-    { id: 'lv3', label: 'Estate Anniversary Levy', amount: 5000, dueDate: '1 Jun', paid: true },
+    { id: 'lv1', label: 'Christmas Decoration Levy', amount: 8000, dueDate: '15 Dec', year: 2026, paid: false },
+    { id: 'lv2', label: 'Security Upgrade Levy', amount: 15000, dueDate: '30 Jul', year: 2026, paid: false },
+    { id: 'lv3', label: 'Estate Anniversary Levy', amount: 5000, dueDate: '1 Jun', year: 2026, paid: true },
   ];
   for (const l of levies) {
     const { paid, ...levyData } = l;
-    await prisma.levy.upsert({ where: { id: l.id }, update: {}, create: levyData });
+    await prisma.levy.upsert({ where: { id: l.id }, update: {}, create: { ...levyData, estateId } });
     if (paid) {
       await prisma.levyPayment.upsert({
         where: { userId_levyId: { userId: resident.id, levyId: l.id } },
         update: {},
-        create: { userId: resident.id, levyId: l.id },
+        create: { userId: resident.id, levyId: l.id, estateId },
       });
     }
   }
@@ -364,6 +384,7 @@ async function main() {
   const activePass = await prisma.visitorPass.create({
     data: {
       residentId: resident.id,
+      estateId,
       name: 'Tunde Bakare',
       phone: '0701 234 5678',
       plate: 'LND 442 KJ',
@@ -375,6 +396,7 @@ async function main() {
   const expiredPass = await prisma.visitorPass.create({
     data: {
       residentId: resident.id,
+      estateId,
       name: 'Chioma Nwosu',
       phone: '0812 987 6543',
       code: '116607',
@@ -389,6 +411,7 @@ async function main() {
     data: {
       visitorPassId: expiredPass.id,
       guardId: guard.id,
+      estateId,
       entryAt: new Date(now - 1 * day - 2 * 60 * 60 * 1000),
       exitAt: new Date(now - 1 * day),
     },

@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsInt, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CreateVisitorPassDto {
   @IsString()
@@ -13,7 +13,7 @@ export class CreateVisitorPassDto {
   @IsString()
   plate?: string;
 
+  @IsOptional()
   @IsInt()
-  @IsIn([4, 24, 72])
-  validHours!: number;
+  validHours?: number = 24;
 }

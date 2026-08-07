@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { PledgeDto } from './dto/pledge.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -17,9 +17,9 @@ export class ProjectsController {
   constructor(private projects: ProjectsService) {}
 
   @Get()
-  @Roles('RESIDENT', 'ADMIN')
-  list() {
-    return this.projects.list();
+  @Roles('RESIDENT', 'ADMIN', 'PROJECT_ADMIN')
+  list(@CurrentUser() user: AuthUser) {
+    return this.projects.list(user.estateId);
   }
 
   @Get('my-pledges')
@@ -28,9 +28,9 @@ export class ProjectsController {
   }
 
   @Get(':id')
-  @Roles('RESIDENT', 'ADMIN')
+  @Roles('RESIDENT', 'ADMIN', 'PROJECT_ADMIN')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.projects.get(id, user.sub);
+    return this.projects.get(id, user.sub, user.estateId);
   }
 
   @Post(':id/pledges')
@@ -39,42 +39,54 @@ export class ProjectsController {
     @Param('id') id: string,
     @Body() dto: PledgeDto,
   ) {
-    return this.projects.pledge(user.sub, id, dto);
+    return this.projects.pledge(user.sub, user.estateId, id, dto);
   }
 
   @Get(':id/pledges')
   @Roles('ADMIN')
-  listPledges(@Param('id') id: string) {
-    return this.projects.listPledges(id);
+  listPledges(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.projects.listPledges(user.estateId, id);
   }
 
   @Post(':id/pledges/:pledgeId/remind')
   @Roles('ADMIN')
-  remindPledge(@Param('id') id: string, @Param('pledgeId') pledgeId: string) {
-    return this.projects.remindPledge(id, pledgeId);
+  remindPledge(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('pledgeId') pledgeId: string) {
+    return this.projects.remindPledge(user.estateId, id, pledgeId);
   }
 
   @Post(':id/pledges/:pledgeId/fulfill')
   @Roles('ADMIN')
-  fulfillPledge(@Param('id') id: string, @Param('pledgeId') pledgeId: string) {
-    return this.projects.fulfillPledge(id, pledgeId);
+  fulfillPledge(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('pledgeId') pledgeId: string) {
+    return this.projects.fulfillPledge(user.estateId, id, pledgeId);
   }
 
   @Post()
+  @Roles('ADMIN', 'PROJECT_ADMIN')
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateProjectDto) {
+    return this.projects.create(user.estateId, dto);
+  }
+
+  @Patch(':id')
   @Roles('ADMIN')
-  create(@Body() dto: CreateProjectDto) {
-    return this.projects.create(dto);
+  update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: CreateProjectDto) {
+    return this.projects.update(user.estateId, id, dto);
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN')
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.projects.remove(user.estateId, id);
   }
 
   @Post(':id/progress')
-  @Roles('ADMIN')
-  updateProgress(@Param('id') id: string, @Body() dto: UpdateProgressDto) {
-    return this.projects.updateProgress(id, dto);
+  @Roles('ADMIN', 'PROJECT_ADMIN')
+  updateProgress(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateProgressDto) {
+    return this.projects.updateProgress(user.estateId, id, dto);
   }
 
   @Post(':id/reports')
-  @Roles('ADMIN')
-  addReport(@Param('id') id: string, @Body() dto: CreateReportDto) {
-    return this.projects.addReport(id, dto);
+  @Roles('ADMIN', 'PROJECT_ADMIN')
+  addReport(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: CreateReportDto) {
+    return this.projects.addReport(user.estateId, id, dto);
   }
 }

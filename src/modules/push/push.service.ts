@@ -15,12 +15,13 @@ export class PushService {
 
   async registerToken(
     userId: string,
+    estateId: string,
     token: string,
     platform: 'ANDROID' | 'IOS',
   ) {
     await this.prisma.deviceToken.upsert({
       where: { token },
-      create: { userId, token, platform },
+      create: { userId, estateId, token, platform },
       update: { userId, platform },
     });
     return { message: 'Device token registered.' };
@@ -35,11 +36,17 @@ export class PushService {
     return this.sendToUsers([userId], payload);
   }
 
-  /** One token lookup + one gateway call for many users, instead of N of each. */
+  /**
+   * One token lookup + one gateway call for many users, instead of N of
+   * each. Filters out revoked accounts here — a single choke point every
+   * push send passes through, rather than trusting each of the many
+   * call sites (visitor entry/exit, payment success, pledge reminders,
+   * estate-wide broadcasts...) to remember the check individually.
+   */
   async sendToUsers(userIds: string[], payload: PushPayload) {
     if (userIds.length === 0) return;
     const tokens = await this.prisma.deviceToken.findMany({
-      where: { userId: { in: userIds } },
+      where: { userId: { in: userIds }, user: { active: true } },
       select: { token: true },
     });
     if (tokens.length === 0) return;

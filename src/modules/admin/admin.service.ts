@@ -29,8 +29,9 @@ function defaultPasswordFor(fullName: string): string {
 export class AdminService {
   constructor(private prisma: PrismaService) {}
 
-  listUsers() {
+  listUsers(estateId: string) {
     return this.prisma.user.findMany({
+      where: { estateId },
       select: {
         id: true,
         phone: true,
@@ -42,13 +43,14 @@ export class AdminService {
         emergencyContactPhone: true,
         vehiclePlates: true,
         mustResetPassword: true,
+        active: true,
         createdAt: true,
       },
       orderBy: [{ role: 'asc' }, { fullName: 'asc' }],
     });
   }
 
-  async createUser(dto: CreateUserDto) {
+  async createUser(estateId: string, dto: CreateUserDto) {
     const existing = await this.prisma.user.findUnique({
       where: { phone: dto.phone },
     });
@@ -69,6 +71,7 @@ export class AdminService {
     const passwordHash = await argon2.hash(passwordToUse);
     const user = await this.prisma.user.create({
       data: {
+        estateId,
         phone: dto.phone,
         fullName: dto.fullName,
         role: dto.role,
@@ -88,9 +91,10 @@ export class AdminService {
     return { ...user, defaultPassword: isGuard ? null : passwordToUse };
   }
 
-  async resetPassword(userId: string, newPassword?: string) {
+  async resetPassword(estateId: string, userId: string, newPassword?: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user || user.estateId !== estateId)
+      throw new NotFoundException('User not found');
 
     const isGuard = user.role === 'GUARD';
     if (isGuard && !newPassword) {
@@ -106,5 +110,23 @@ export class AdminService {
       data: { passwordHash, mustResetPassword: !isGuard },
     });
     return { defaultPassword: isGuard ? null : passwordToUse };
+  }
+
+  /**
+   * Revoking sets `active: false` — it doesn't delete the account or its
+   * history (dues, complaints, visitor passes, etc. all stay intact for
+   * record-keeping), it just blocks every future login/refresh and, via the
+   * JwtAuthGuard's per-request check, kills any session they're already in
+   * within one request. Restoring flips it back on; nothing else changes.
+   */
+  async setActive(estateId: string, callerId: string, userId: string, active: boolean) {
+    if (userId === callerId && !active) {
+      throw new BadRequestException('You cannot revoke your own access.');
+    }
+    const user = await this.prisma.user.findFirst({ where: { id: userId, estateId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    await this.prisma.user.update({ where: { id: userId }, data: { active } });
+    return { message: active ? 'Access restored.' : 'Access revoked.' };
   }
 }

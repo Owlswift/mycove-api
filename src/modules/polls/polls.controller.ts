@@ -17,7 +17,7 @@ export class PollsController {
   @Get()
   @Roles('RESIDENT', 'ADMIN')
   list(@CurrentUser() user: AuthUser) {
-    return this.polls.list(user.sub, user.role);
+    return this.polls.list(user.sub, user.estateId, user.role);
   }
 
   @Post(':id/vote')
@@ -26,12 +26,12 @@ export class PollsController {
     @Param('id') id: string,
     @Body() dto: VoteDto,
   ) {
-    return this.polls.vote(user.sub, id, dto);
+    return this.polls.vote(user.sub, user.estateId, id, dto);
   }
 
   @Post()
   @Roles('ADMIN')
-  create(@Body() dto: CreatePollDto) {
-    return this.polls.create(dto);
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreatePollDto) {
+    return this.polls.create(user.estateId, dto);
   }
 }

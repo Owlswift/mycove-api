@@ -13,8 +13,9 @@ export class ProjectsService {
     private notifications: NotificationsService,
   ) {}
 
-  async list() {
+  async list(estateId: string) {
     const projects = await this.prisma.project.findMany({
+      where: { estateId },
       include: { reports: { orderBy: { createdAt: 'asc' } } },
     });
     return projects.map((p) => ({
@@ -29,14 +30,16 @@ export class ProjectsService {
     }));
   }
 
-  async get(id: string, userId: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id },
+  async get(id: string, userId: string, estateId: string) {
+    const project = await this.prisma.project.findFirst({
+      where: { id, estateId },
       include: {
         budgetLines: true,
         reports: { orderBy: { createdAt: 'asc' } },
         donations: true,
         pledges: true,
+        allocations: { select: { amount: true } },
+        invoices: { where: { status: 'APPROVED' }, select: { amount: true } },
       },
     });
     if (!project) throw new NotFoundException('Project not found');
@@ -48,6 +51,11 @@ export class ProjectsService {
       (sum, b) => sum + b.amount,
       0,
     );
+    // Real estate-funded fields — what Finance has actually allocated and
+    // spent via approved invoices, distinct from `budget`/`totalBudget`
+    // above (a Project Admin's planned breakdown, entered by category).
+    const allocated = project.allocations.reduce((sum, a) => sum + a.amount, 0);
+    const spent = project.invoices.reduce((sum, i) => sum + i.amount, 0);
     const myDonated = project.donations
       .filter((d) => d.userId === userId)
       .reduce((sum, d) => sum + d.amount, 0);
@@ -68,6 +76,9 @@ export class ProjectsService {
         amount: b.amount,
       })),
       totalBudget,
+      allocated,
+      spent,
+      remaining: allocated - spent,
       reports: project.reports.map((r) => ({
         author: r.author,
         date: r.date,
@@ -86,21 +97,21 @@ export class ProjectsService {
     };
   }
 
-  async pledge(userId: string, projectId: string, dto: PledgeDto) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+  async pledge(userId: string, estateId: string, projectId: string, dto: PledgeDto) {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, estateId },
     });
     if (!project) throw new NotFoundException('Project not found');
 
     await this.prisma.projectPledge.create({
-      data: { projectId, userId, amount: dto.amount },
+      data: { projectId, userId, amount: dto.amount, estateId: project.estateId },
     });
     return { message: 'Thanks for your pledge!' };
   }
 
-  listPledges(projectId: string) {
+  listPledges(estateId: string, projectId: string) {
     return this.prisma.projectPledge.findMany({
-      where: { projectId },
+      where: { projectId, estateId },
       orderBy: { createdAt: 'desc' },
       include: { user: { select: { fullName: true, phone: true, house: true } } },
     });
@@ -121,8 +132,8 @@ export class ProjectsService {
     }));
   }
 
-  async remindPledge(projectId: string, pledgeId: string) {
-    const pledge = await this.findPledgeOrThrow(projectId, pledgeId);
+  async remindPledge(estateId: string, projectId: string, pledgeId: string) {
+    const pledge = await this.findPledgeOrThrow(estateId, projectId, pledgeId);
     if (pledge.fulfilledAt) {
       throw new ConflictException('This pledge has already been fulfilled.');
     }
@@ -140,15 +151,15 @@ export class ProjectsService {
   }
 
   /** Records the pledged amount as a real donation and marks the pledge fulfilled — the admin-confirmed "they actually paid" step. */
-  async fulfillPledge(projectId: string, pledgeId: string) {
-    const pledge = await this.findPledgeOrThrow(projectId, pledgeId);
+  async fulfillPledge(estateId: string, projectId: string, pledgeId: string) {
+    const pledge = await this.findPledgeOrThrow(estateId, projectId, pledgeId);
     if (pledge.fulfilledAt) {
       throw new ConflictException('This pledge has already been fulfilled.');
     }
 
     await this.prisma.$transaction([
       this.prisma.projectDonation.create({
-        data: { projectId, userId: pledge.userId, amount: pledge.amount },
+        data: { projectId, userId: pledge.userId, amount: pledge.amount, estateId: pledge.estateId },
       }),
       this.prisma.projectPledge.update({
         where: { id: pledgeId },
@@ -158,12 +169,12 @@ export class ProjectsService {
     return { message: 'Pledge marked as fulfilled' };
   }
 
-  private async findPledgeOrThrow(projectId: string, pledgeId: string) {
-    const pledge = await this.prisma.projectPledge.findUnique({
-      where: { id: pledgeId },
+  private async findPledgeOrThrow(estateId: string, projectId: string, pledgeId: string) {
+    const pledge = await this.prisma.projectPledge.findFirst({
+      where: { id: pledgeId, projectId, estateId },
       include: { project: { select: { title: true } } },
     });
-    if (!pledge || pledge.projectId !== projectId) {
+    if (!pledge) {
       throw new NotFoundException('Pledge not found');
     }
     return pledge;
@@ -173,9 +184,10 @@ export class ProjectsService {
     return `₦${amount.toLocaleString('en-NG')}`;
   }
 
-  create(dto: CreateProjectDto) {
-    return this.prisma.project.create({
+  async create(estateId: string, dto: CreateProjectDto) {
+    const project = await this.prisma.project.create({
       data: {
+        estateId,
         title: dto.title,
         description: dto.description,
         goal: dto.goal,
@@ -183,38 +195,70 @@ export class ProjectsService {
         progress: 0,
         baseRaised: 0,
         mediaBase64: dto.mediaBase64,
-        budgetLines: { create: dto.budget },
+        budgetLines: { create: dto.budget.map((b) => ({ ...b, estateId })) },
       },
       include: { budgetLines: true },
     });
+    await this.notifications.notifyProjectUpdate(project.estateId, project.title);
+    return project;
   }
 
-  async updateProgress(id: string, dto: UpdateProgressDto) {
-    await this.findTitleOrThrow(id);
+  async updateProgress(estateId: string, id: string, dto: UpdateProgressDto) {
+    const project = await this.findTitleOrThrow(estateId, id);
     await this.prisma.project.update({
       where: { id },
       data: { progress: dto.progress, ...(dto.status && { status: dto.status }) },
     });
+    await this.notifications.notifyProjectUpdate(project.estateId, project.title);
     return { message: 'Progress updated' };
   }
 
-  async addReport(id: string, dto: CreateReportDto) {
-    const project = await this.findTitleOrThrow(id);
+  async update(estateId: string, id: string, dto: CreateProjectDto) {
+    const project = await this.findTitleOrThrow(estateId, id);
+    await this.prisma.project.update({
+      where: { id },
+      data: {
+        title: dto.title,
+        description: dto.description,
+        goal: dto.goal,
+        ...(dto.mediaBase64 !== undefined && { mediaBase64: dto.mediaBase64 }),
+        budgetLines: {
+          deleteMany: {},
+          create: dto.budget.map((b) => ({ ...b, estateId: project.estateId })),
+        },
+      },
+    });
+    await this.notifications.notifyProjectUpdate(project.estateId, project.title);
+    return { message: 'Project updated' };
+  }
+
+  async remove(estateId: string, id: string) {
+    await this.findTitleOrThrow(estateId, id);
+    await this.prisma.project.delete({ where: { id } });
+    return { message: 'Project deleted' };
+  }
+
+  async addReport(estateId: string, id: string, dto: CreateReportDto) {
+    const project = await this.findTitleOrThrow(estateId, id);
     await this.prisma.projectReport.create({
       data: {
         projectId: id,
+        estateId: project.estateId,
         author: dto.author,
         date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
         text: dto.text,
         mediaBase64: dto.mediaBase64,
       },
     });
-    await this.notifications.notifyProjectUpdate(project.title);
+    await this.notifications.notifyProjectUpdate(project.estateId, project.title);
     return { message: 'Report added' };
   }
 
-  private async findTitleOrThrow(id: string) {
-    const project = await this.prisma.project.findUnique({ where: { id }, select: { title: true } });
+  private async findTitleOrThrow(estateId: string, id: string) {
+    const project = await this.prisma.project.findFirst({
+      where: { id, estateId },
+      select: { title: true, estateId: true },
+    });
     if (!project) throw new NotFoundException('Project not found');
     return project;
   }
@@ -236,6 +280,8 @@ export class ProjectsService {
     status: string;
     progress: number;
     mediaBase64: string | null;
+    description: string;
+    goal: number;
   }) {
     return {
       id: project.id,
@@ -243,6 +289,8 @@ export class ProjectsService {
       status: project.status,
       progress: project.progress,
       mediaBase64: project.mediaBase64,
+      description: project.description,
+      goal: project.goal,
     };
   }
 }
