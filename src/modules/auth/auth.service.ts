@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
@@ -64,63 +65,83 @@ export class AuthService {
       });
     }
 
+    const accessToken = await this.signAccessToken(user.id, user.role, user.estateId);
+    const refresh = await this.signRefreshToken(user.id);
+
+    // Web/admin logins don't send a platform — there's no "device" to
+    // track a session for in that case, so this stays mobile-only.
+    if (dto.platform) {
+      await this.prisma.session.create({
+        data: {
+          userId: user.id,
+          estateId: user.estateId,
+          jti: refresh.jti,
+          platform: dto.platform,
+          deviceName: dto.deviceName,
+        },
+      });
+    }
+
     return {
-      accessToken: await this.signAccessToken(user.id, user.role, user.estateId),
-      refreshToken: await this.signRefreshToken(user.id),
+      accessToken,
+      refreshToken: refresh.token,
       mustResetPassword: user.mustResetPassword,
     };
   }
 
+  // Always returns the same shape regardless of whether the phone number
+  // belongs to a real (and active) account — branching the response would
+  // let a caller enumerate registered phone numbers just by probing this
+  // endpoint. An OTP is only actually created (and, outside production,
+  // echoed back as devOtp) when there's a real active user to send it to.
   async forgotPassword(dto: ForgotPasswordDto) {
     const user = await this.prisma.user.findUnique({
       where: { phone: dto.phone },
     });
-    if (!user)
-      throw new UnauthorizedException(
-        'No account found for that phone number.',
-      );
-    if (!user.active) {
-      throw new UnauthorizedException({
-        message: 'This account has been deactivated. Contact your estate admin.',
-        code: 'ACCOUNT_DEACTIVATED',
+
+    let devOtp: string | undefined;
+    if (user?.active) {
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      await this.prisma.passwordResetOtp.create({
+        data: {
+          userId: user.id,
+          estateId: user.estateId,
+          code,
+          expiresAt: new Date(Date.now() + OTP_TTL_MS),
+        },
       });
+      // No SMS provider wired up: the code is echoed back for local/demo
+      // use instead of silently doing nothing. Still validated for real
+      // on verify.
+      devOtp = process.env.NODE_ENV === 'production' ? undefined : code;
     }
 
-    const code = String(Math.floor(1000 + Math.random() * 9000));
-    await this.prisma.passwordResetOtp.create({
-      data: {
-        userId: user.id,
-        estateId: user.estateId,
-        code,
-        expiresAt: new Date(Date.now() + OTP_TTL_MS),
-      },
-    });
-
-    // No SMS provider wired up: the code is echoed back for local/demo use
-    // instead of silently doing nothing. Still validated for real on verify.
-    const devOtp = process.env.NODE_ENV === 'production' ? undefined : code;
-    return { message: 'A one-time code has been sent to your phone.', devOtp };
+    return {
+      message: 'If that phone number is registered, a one-time code has been sent.',
+      devOtp,
+    };
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
     const user = await this.prisma.user.findUnique({
       where: { phone: dto.phone },
     });
-    if (!user)
-      throw new UnauthorizedException(
-        'No account found for that phone number.',
-      );
 
-    const otp = await this.prisma.passwordResetOtp.findFirst({
-      where: {
-        userId: user.id,
-        code: dto.code,
-        consumedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!otp)
+    // Same enumeration concern as forgotPassword: an unknown phone number
+    // must fail exactly like a wrong/expired code, not with a distinct
+    // "no account" error.
+    const otp = user
+      ? await this.prisma.passwordResetOtp.findFirst({
+          where: {
+            userId: user.id,
+            code: dto.code,
+            consumedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+      : null;
+    if (!user || !otp)
       throw new BadRequestException('That code is invalid or has expired.');
 
     await this.prisma.passwordResetOtp.update({
@@ -222,10 +243,22 @@ export class AuthService {
     }
 
     await this.blacklist(payload.jti, REFRESH_TOKEN_TTL_MS);
+    const refresh = await this.signRefreshToken(user.id);
+
+    // Rotate the existing session in place (same device, new jti) rather
+    // than inserting a new row — this token belongs to one continuous
+    // login, not a fresh one. No row to update is fine too (e.g. a web
+    // session that never had one to begin with).
+    await this.prisma.session
+      .update({
+        where: { jti: payload.jti },
+        data: { jti: refresh.jti, lastUsedAt: new Date() },
+      })
+      .catch(() => undefined);
 
     return {
       accessToken: await this.signAccessToken(user.id, user.role, user.estateId),
-      refreshToken: await this.signRefreshToken(user.id),
+      refreshToken: refresh.token,
     };
   }
 
@@ -238,6 +271,7 @@ export class AuthService {
           secret: process.env.JWT_SECRET,
         });
         await this.blacklist(payload.jti, REFRESH_TOKEN_TTL_MS);
+        await this.prisma.session.delete({ where: { jti: payload.jti } }).catch(() => undefined);
       } catch {
         // Already invalid/expired — nothing left to revoke.
       }
@@ -256,10 +290,11 @@ export class AuthService {
 
   private async signRefreshToken(userId: string) {
     const jti = crypto.randomUUID();
-    return this.jwt.signAsync(
+    const token = await this.jwt.signAsync(
       { sub: userId, jti, purpose: REFRESH_TOKEN_PURPOSE },
       { secret: process.env.JWT_SECRET, expiresIn: REFRESH_TOKEN_TTL },
     );
+    return { token, jti };
   }
 
   /** Idempotent — a duplicate blacklist attempt (e.g. a retried request) is a no-op, not an error. */
@@ -269,5 +304,23 @@ export class AuthService {
       create: { tokenJti, expiresAt: new Date(Date.now() + ttlMs) },
       update: {},
     });
+  }
+
+  listSessions(userId: string, estateId: string) {
+    return this.prisma.session.findMany({
+      where: { userId, estateId },
+      orderBy: { lastUsedAt: 'desc' },
+    });
+  }
+
+  async revokeSession(userId: string, estateId: string, id: string) {
+    const session = await this.prisma.session.findFirst({ where: { id, estateId } });
+    if (!session || session.userId !== userId) {
+      throw new NotFoundException('Session not found');
+    }
+
+    await this.blacklist(session.jti, REFRESH_TOKEN_TTL_MS);
+    await this.prisma.session.delete({ where: { id } });
+    return { message: 'Device logged out.' };
   }
 }

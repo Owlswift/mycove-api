@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as argon2 from 'argon2';
 
+import { normalizePhone } from '../src/common/utils/normalize-phone';
+
 const connectionString = process.env.DATABASE_URL;
 const adapter = new PrismaPg(connectionString!);
 const prisma = new PrismaClient({ adapter });
@@ -24,11 +26,11 @@ async function main() {
   const financePasswordHash = await argon2.hash('sunrisefinance123');
 
   const resident = await prisma.user.upsert({
-    where: { phone: '08099998801' },
+    where: { phone: normalizePhone('08099998801') },
     update: { passwordHash: residentPasswordHash, mustResetPassword: false },
     create: {
       estateId,
-      phone: '08099998801',
+      phone: normalizePhone('08099998801'),
       passwordHash: residentPasswordHash,
       role: 'RESIDENT',
       fullName: 'Bola Fashola',
@@ -37,11 +39,11 @@ async function main() {
   });
 
   const guard = await prisma.user.upsert({
-    where: { phone: '08099998802' },
+    where: { phone: normalizePhone('08099998802') },
     update: { passwordHash: guardPasswordHash },
     create: {
       estateId,
-      phone: '08099998802',
+      phone: normalizePhone('08099998802'),
       passwordHash: guardPasswordHash,
       role: 'GUARD',
       fullName: 'Emeka Nwachukwu',
@@ -49,11 +51,11 @@ async function main() {
   });
 
   await prisma.user.upsert({
-    where: { phone: '08099998803' },
+    where: { phone: normalizePhone('08099998803') },
     update: { passwordHash: adminPasswordHash, mustResetPassword: false },
     create: {
       estateId,
-      phone: '08099998803',
+      phone: normalizePhone('08099998803'),
       passwordHash: adminPasswordHash,
       role: 'ADMIN',
       fullName: 'Sunrise Admin',
@@ -62,11 +64,11 @@ async function main() {
   });
 
   await prisma.user.upsert({
-    where: { phone: '08099998804' },
+    where: { phone: normalizePhone('08099998804') },
     update: { passwordHash: financePasswordHash, mustResetPassword: false },
     create: {
       estateId,
-      phone: '08099998804',
+      phone: normalizePhone('08099998804'),
       passwordHash: financePasswordHash,
       role: 'FINANCE_SECRETARY',
       fullName: 'Amaka Eze',

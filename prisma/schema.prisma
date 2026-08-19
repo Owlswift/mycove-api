@@ -23,10 +23,13 @@ model Estate {
   id        String   @id @default(cuid())
   code      String   @unique
   name      String
+  address   String?
+  managedBy String?
   createdAt DateTime @default(now())
 
   users              User[]
   deviceTokens       DeviceToken[]
+  sessions           Session[]
   passwordResetOtps  PasswordResetOtp[]
   announcements      Announcement[]
   announcementReads  AnnouncementRead[]
@@ -87,6 +90,7 @@ model User {
   complaints         Complaint[]
   passwordResetOtps  PasswordResetOtp[]
   deviceTokens       DeviceToken[]
+  sessions           Session[]
   projectAllocations ProjectAllocation[] @relation("AllocatedBy")
   invoicesRaised     Invoice[]           @relation("InvoiceRaisedBy")
   invoicesReviewed   Invoice[]           @relation("InvoiceReviewedBy")
@@ -106,6 +110,27 @@ model DeviceToken {
   token     String         @unique
   platform  DevicePlatform
   createdAt DateTime       @default(now())
+
+  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([estateId])
+}
+
+/// A login session, one per issued refresh token — [jti] is the refresh
+/// token's own jti and gets rotated in place on every /auth/refresh call
+/// (the token itself is single-use) rather than spawning a new row, so
+/// this reflects one continuous device login, not one row per refresh.
+model Session {
+  id         String         @id @default(cuid())
+  estateId   String
+  userId     String
+  jti        String         @unique
+  platform   DevicePlatform
+  deviceName String?
+  createdAt  DateTime       @default(now())
+  lastUsedAt DateTime       @default(now())
 
   estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

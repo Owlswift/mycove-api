@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as argon2 from 'argon2';
 
+import { normalizePhone } from '../src/common/utils/normalize-phone';
+
 const connectionString = process.env.DATABASE_URL;
 const adapter = new PrismaPg(connectionString!);
 const prisma = new PrismaClient({ adapter });
@@ -13,8 +15,13 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   const estate = await prisma.estate.upsert({
     where: { code: 'PALM001' },
-    update: {},
-    create: { code: 'PALM001', name: 'Palm Court Estate' },
+    update: { address: 'Lekki Phase 1, Lagos', managedBy: 'Palm Court Association' },
+    create: {
+      code: 'PALM001',
+      name: 'Palm Court Estate',
+      address: 'Lekki Phase 1, Lagos',
+      managedBy: 'Palm Court Association',
+    },
   });
   const estateId = estate.id;
 
@@ -29,11 +36,11 @@ async function main() {
   // exercising login/reset flows during testing permanently drifts these
   // accounts away from their documented demo credentials.
   const resident = await prisma.user.upsert({
-    where: { phone: '08035550142' },
+    where: { phone: normalizePhone('08035550142') },
     update: { passwordHash: residentPasswordHash, mustResetPassword: false },
     create: {
       estateId,
-      phone: '08035550142',
+      phone: normalizePhone('08035550142'),
       passwordHash: residentPasswordHash,
       role: 'RESIDENT',
       fullName: 'Ifeoma Adebayo',
@@ -42,11 +49,11 @@ async function main() {
   });
 
   const guard = await prisma.user.upsert({
-    where: { phone: '08052229981' },
+    where: { phone: normalizePhone('08052229981') },
     update: { passwordHash: guardPasswordHash },
     create: {
       estateId,
-      phone: '08052229981',
+      phone: normalizePhone('08052229981'),
       passwordHash: guardPasswordHash,
       role: 'GUARD',
       fullName: 'Musa Ibrahim',
@@ -55,11 +62,11 @@ async function main() {
 
   // Preserves the mockup's "Try temp1234 to preview first-time setup" demo path.
   await prisma.user.upsert({
-    where: { phone: '08099990000' },
+    where: { phone: normalizePhone('08099990000') },
     update: { passwordHash: tempPasswordHash, mustResetPassword: true },
     create: {
       estateId,
-      phone: '08099990000',
+      phone: normalizePhone('08099990000'),
       passwordHash: tempPasswordHash,
       role: 'RESIDENT',
       fullName: 'New Resident',
@@ -71,11 +78,11 @@ async function main() {
   // Bootstrap account for the admin web app — there's no self-registration,
   // so someone has to already be an admin to create the first real one.
   await prisma.user.upsert({
-    where: { phone: '08000000001' },
+    where: { phone: normalizePhone('08000000001') },
     update: { passwordHash: adminPasswordHash, mustResetPassword: false },
     create: {
       estateId,
-      phone: '08000000001',
+      phone: normalizePhone('08000000001'),
       passwordHash: adminPasswordHash,
       role: 'ADMIN',
       fullName: 'Estate Admin',
@@ -84,11 +91,11 @@ async function main() {
   });
 
   await prisma.user.upsert({
-    where: { phone: '08000000002' },
+    where: { phone: normalizePhone('08000000002') },
     update: { passwordHash: financePasswordHash, mustResetPassword: false },
     create: {
       estateId,
-      phone: '08000000002',
+      phone: normalizePhone('08000000002'),
       passwordHash: financePasswordHash,
       role: 'FINANCE_SECRETARY',
       fullName: 'Chidinma Okafor',
@@ -97,11 +104,11 @@ async function main() {
   });
 
   await prisma.user.upsert({
-    where: { phone: '08000000003' },
+    where: { phone: normalizePhone('08000000003') },
     update: { passwordHash: projectAdminPasswordHash, mustResetPassword: false },
     create: {
       estateId,
-      phone: '08000000003',
+      phone: normalizePhone('08000000003'),
       passwordHash: projectAdminPasswordHash,
       role: 'PROJECT_ADMIN',
       fullName: 'Tunde Balogun',

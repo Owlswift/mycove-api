@@ -6,7 +6,10 @@ export class UsersService {
   constructor(private prisma: PrismaService) {}
 
   async me(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { estate: true },
+    });
     if (!user) throw new NotFoundException('User not found');
 
     const initials = user.fullName
@@ -28,6 +31,8 @@ export class UsersService {
       vehiclePlates: user.vehiclePlates,
       initials,
       mustResetPassword: user.mustResetPassword,
+      estateName: user.estate.name,
+      estateAddress: user.estate.address,
     };
   }
 }

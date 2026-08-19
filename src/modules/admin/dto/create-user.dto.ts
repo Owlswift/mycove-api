@@ -1,6 +1,10 @@
+import { Transform } from 'class-transformer';
 import { IsIn, IsOptional, IsString, MinLength, ValidateIf } from 'class-validator';
 
+import { normalizePhone } from '../../../common/utils/normalize-phone';
+
 export class CreateUserDto {
+  @Transform(({ value }) => normalizePhone(value))
   @IsString()
   phone!: string;
 
