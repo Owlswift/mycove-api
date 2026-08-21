@@ -424,6 +424,32 @@ async function main() {
     },
   });
 
+  // Not estate-scoped — a national reference list, not per-estate data.
+  // `code` matches VTpass's serviceID slugs; `shortCode` is the real-world
+  // abbreviation shown in the app and doubles as the bundled logo asset's
+  // filename (assets/discos/<shortCode lowercased>.png).
+  const discos = [
+    { code: 'ikeja-electric', shortCode: 'IKEDC', name: 'Ikeja Electricity', sortOrder: 1 },
+    { code: 'eko-electric', shortCode: 'EKEDC', name: 'Eko Electricity', sortOrder: 2 },
+    { code: 'abuja-electric', shortCode: 'AEDC', name: 'Abuja Electricity', sortOrder: 3 },
+    { code: 'kano-electric', shortCode: 'KEDCO', name: 'Kano Electricity', sortOrder: 4 },
+    { code: 'portharcourt-electric', shortCode: 'PHED', name: 'Port Harcourt Electricity', sortOrder: 5 },
+    { code: 'jos-electric', shortCode: 'JEDC', name: 'Jos Electricity', sortOrder: 6 },
+    { code: 'ibadan-electric', shortCode: 'IBEDC', name: 'Ibadan Electricity', sortOrder: 7 },
+    { code: 'kaduna-electric', shortCode: 'KAEDCO', name: 'Kaduna Electricity', sortOrder: 8 },
+    { code: 'enugu-electric', shortCode: 'EEDC', name: 'Enugu Electricity', sortOrder: 9 },
+    { code: 'benin-electric', shortCode: 'BEDC', name: 'Benin Electricity', sortOrder: 10 },
+    { code: 'aba-electric', shortCode: 'ABA', name: 'Aba Electricity', sortOrder: 11 },
+    { code: 'yola-electric', shortCode: 'YEDC', name: 'Yola Electricity', sortOrder: 12 },
+  ];
+  for (const d of discos) {
+    await prisma.electricityDisco.upsert({
+      where: { code: d.code },
+      update: { shortCode: d.shortCode, name: d.name, sortOrder: d.sortOrder, active: true },
+      create: d,
+    });
+  }
+
   console.log('Seed complete.');
   console.log('  Resident login: 08035550142 / estate123');
   console.log('  Guard login:    08052229981 / guard123');

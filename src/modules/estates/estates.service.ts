@@ -12,7 +12,14 @@ export class EstatesService {
   async findByCode(code: string) {
     const estate = await this.prisma.estate.findUnique({
       where: { code: code.trim().toUpperCase() },
-      select: { id: true, code: true, name: true, address: true, managedBy: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        address: true,
+        managedBy: true,
+        imageBase64: true,
+      },
     });
     if (!estate) throw new NotFoundException('No estate found for that code.');
 

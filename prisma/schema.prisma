@@ -20,12 +20,13 @@ enum Role {
 /// single `WHERE estateId = ...` and it's structurally hard to accidentally
 /// leak one estate's data into another's request.
 model Estate {
-  id        String   @id @default(cuid())
-  code      String   @unique
-  name      String
-  address   String?
-  managedBy String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  address     String?
+  managedBy   String?
+  imageBase64 String?
+  createdAt   DateTime @default(now())
 
   users              User[]
   deviceTokens       DeviceToken[]
@@ -57,6 +58,8 @@ model Estate {
   rulesSections      RulesSection[]
   ruleItems          RuleItem[]
   complaints         Complaint[]
+  utilityMeters      UtilityMeter[]
+  utilityPurchases   UtilityPurchase[]
 }
 
 model User {
@@ -94,6 +97,8 @@ model User {
   projectAllocations ProjectAllocation[] @relation("AllocatedBy")
   invoicesRaised     Invoice[]           @relation("InvoiceRaisedBy")
   invoicesReviewed   Invoice[]           @relation("InvoiceReviewedBy")
+  utilityMeters      UtilityMeter[]
+  utilityPurchases   UtilityPurchase[]
 
   @@index([estateId])
 }
@@ -633,4 +638,106 @@ model Complaint {
 
   @@index([userId])
   @@index([estateId])
+}
+
+enum UtilityType {
+  ELECTRICITY
+  AIRTIME
+}
+
+enum UtilityProviderName {
+  VTPASS
+  BUYPOWER
+}
+
+enum MeterType {
+  PREPAID
+  POSTPAID
+}
+
+enum UtilityPurchaseStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+}
+
+/// A resident's verified meter, saved so it doesn't need re-verifying with
+/// the DISCO on every purchase — verify-once, reuse-many, same shape as how
+/// a saved card works on a payments screen.
+model UtilityMeter {
+  id           String    @id @default(cuid())
+  estateId     String
+  userId       String
+  discoCode    String // provider serviceID, e.g. VTpass's "ikeja-electric"
+  discoName    String // display name, e.g. "Ikeja Electric"
+  meterNumber  String
+  meterType    MeterType
+  customerName String?
+  address      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  estate    Estate            @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purchases UtilityPurchase[]
+
+  @@unique([userId, meterNumber])
+  @@index([estateId])
+  @@index([userId])
+}
+
+/// One row per electricity or airtime purchase attempt. [provider] records
+/// whichever provider actually fulfilled it (VTpass primary, Buypower as
+/// fallback on a genuine provider failure — never on a request-validation
+/// rejection, since the second provider would likely reject the same bad
+/// input too); [attemptedProviders] keeps the full failover trail for
+/// support/debugging even when the first attempt succeeds.
+model UtilityPurchase {
+  id                 String                @id @default(cuid())
+  estateId           String
+  userId             String
+  type               UtilityType
+  meterId            String? // set for ELECTRICITY, null for AIRTIME
+  phone              String? // AIRTIME recipient, or electricity contact phone
+  network            String? // AIRTIME only: mtn / airtel / glo / etisalat
+  amount             Int
+  status             UtilityPurchaseStatus @default(PENDING)
+  provider           UtilityProviderName?
+  attemptedProviders UtilityProviderName[] @default([])
+  requestId          String                @unique // idempotency key sent to the provider
+  providerRef        String? // provider's own transaction id
+  token              String? // electricity token (prepaid only)
+  units              String? // e.g. "79.9 kWh"
+  tariff             String?
+  failureReason      String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  estate Estate        @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meter  UtilityMeter? @relation(fields: [meterId], references: [id])
+
+  @@index([estateId])
+  @@index([userId])
+}
+
+/// The list of Nigerian electricity DISCOs residents can pick from when
+/// buying electricity. Deliberately NOT estate-scoped, unlike everything
+/// else in this schema — DISCOs are a national reference list, not
+/// per-estate data. [code] is the canonical VTpass-style serviceID stored
+/// on UtilityMeter.discoCode/UtilityPurchase and passed to both providers
+/// (BuypowerProvider translates it to BuyPower's own short codes
+/// internally). [shortCode] is the real-world abbreviation shown in the
+/// app (e.g. "IKEDC") — the mobile app also uses it, lowercased, as the
+/// bundled logo asset's filename (assets/discos/<shortCode>.png), so
+/// changing it here means renaming the matching asset too.
+model ElectricityDisco {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  shortCode String
+  name      String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

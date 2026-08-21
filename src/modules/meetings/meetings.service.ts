@@ -25,6 +25,7 @@ export class MeetingsService {
       date: m.date,
       time: m.time,
       location: m.location,
+      scheduledAt: m.scheduledAt,
       countdown: daysAwayLabel(m.scheduledAt),
     }));
   }

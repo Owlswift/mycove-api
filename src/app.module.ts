@@ -20,6 +20,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { SpotlightsModule } from './modules/spotlights/spotlights.module';
 import { EstatesModule } from './modules/estates/estates.module';
+import { UtilitiesModule } from './modules/utilities/utilities.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { EstatesModule } from './modules/estates/estates.module';
     FinanceModule,
     SpotlightsModule,
     EstatesModule,
+    UtilitiesModule,
   ],
 })
 export class AppModule {}
