@@ -120,6 +120,7 @@ model User {
   utilityPurchases         UtilityPurchase[]
   wallet                   Wallet?
   walletTransactions       WalletTransaction[]
+  meetingsApproved         Meeting[]           @relation("MeetingApprover")
 
   @@index([estateId])
 }
@@ -266,6 +267,12 @@ model AnnouncementRead {
   @@index([estateId])
 }
 
+enum MeetingAiStatus {
+  NOT_PROCESSED
+  PROCESSED
+  FAILED
+}
+
 model Meeting {
   id          String   @id @default(cuid())
   estateId    String
@@ -274,11 +281,33 @@ model Meeting {
   time        String
   location    String
   agenda      String[]
+  // The secretary's own account of what happened, written after the
+  // meeting — the source of truth the voice assistant reads verbatim (see
+  // AppNotifier._answerLastMeetingReport). Null until someone fills it in.
+  // Always resident-visible once written, independent of AI
+  // processing/approval below.
+  report      String?
   scheduledAt DateTime
   createdAt   DateTime @default(now())
 
+  // Phase 2: an AI pass over `report`, run once when it's written/edited
+  // (see MeetingsService.adminCreate/adminUpdate), producing a searchable
+  // index over the report — never a replacement for it. Residents and the
+  // voice assistant only ever see these fields once an admin has reviewed
+  // and approved them (see approvedAt) — see MeetingAiExtractor for the
+  // extraction itself.
+  aiStatus          MeetingAiStatus @default(NOT_PROCESSED)
+  aiTopics          String[]        @default([])
+  aiDecisions       String[]        @default([])
+  aiActionItems     String[]        @default([])
+  aiError           String?
+  aiProcessedAt     DateTime?
+  approvedAt        DateTime?
+  approvedByAdminId String?
+
   estate          Estate          @relation(fields: [estateId], references: [id], onDelete: Cascade)
   calendarEntries CalendarEntry[]
+  approvedByAdmin User?           @relation("MeetingApprover", fields: [approvedByAdminId], references: [id])
 
   @@index([estateId])
 }

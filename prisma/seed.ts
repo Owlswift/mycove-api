@@ -158,6 +158,94 @@ async function main() {
 
   const now = Date.now();
   const day = 24 * 60 * 60 * 1000;
+
+  const q3Report = `Q3 GENERAL MEETING — PALM COURT ESTATE
+Held Monday, 3 August 2026 at the Estate Hall, 5:00 PM
+
+1. OPENING AND ATTENDANCE
+
+The meeting was called to order at 5:07 PM by the Chairman, Chief Emeka Okonkwo, after the arrival and registration of 87 resident representatives from 52 of the 78 households in the estate. The Secretary, Mrs. Funmilayo Adeyemi, confirmed that a quorum was present. Opening prayers were led by Elder Paulinus Eze, and the minutes of the previous general meeting held on 27th July were reviewed and adopted as circulated.
+
+2. Q2 FINANCIAL REVIEW
+
+The Finance Secretary, Mr. Olumide Ajayi, presented the financial report for the second quarter of 2026. Total income for the quarter was ₦18,640,000. This comprises ₦12,285,000 in monthly service charge contributions, ₦2,400,000 from the Security Upgrade Levy, ₦1,400,000 from the Estate Anniversary Levy, and ₦2,555,000 in project pledges and other income.
+
+Total expenditure for the quarter was ₦15,912,000. The major components include:
+- Perimeter Fence Upgrade materials and supplier payments: ₦7,100,000 (as of the June drawdown)
+- Borehole Water Treatment Plant equipment procurement: ₦4,100,000
+- Security agency fees for the two new gate officers: ₦1,600,000
+- Street lighting repairs and floodlight procurement for the eastern entrance: ₦450,000
+- One-off generator servicing for the borehole pump house: ₦280,000
+- Sundry office and event expenses: ₦382,000
+
+The Finance Secretary drew the meeting's attention to the outstanding dues position. As at 31st July, nine households remain in arrears of two months or more. A revised dues reminder was issued on 1st August. A motion was raised and seconded to extend the late-fee waiver window by one week for households who pay in full on or before 12th August, to encourage further compliance. The motion was carried unanimously.
+
+3. PERIMETER FENCE PROJECT UPDATE
+
+The Project Administrator, Mr. Tunde Balogun, gave an update on the Perimeter Fence Upgrade. The northern and eastern sections now stand at 85% and 78% completion respectively, bringing the overall project to 72% complete. The rear access lane has received its new precast panels and razor wire, and the security presence at the rear gate has already begun to reduce unofficial entries.
+
+The project has spent ₦5,100,000 to date against a ₦5,150,000 budget for materials. The balance is allocated to the installation of a new boom at the rear gate and a small CCTV housing adjacent to the guard post. The contractors have given a projected completion date of 25th September 2026, weather permitting.
+
+A discussion followed regarding residents who park cars and store building materials along the eastern fence alignment in breach of the Construction and Materials Guideline. Management was directed to write to each affected household by 8th August requiring materials to be cleared before the next fencing crew visit on 12th August.
+
+4. RESIDENT CONCERNS AND Q&A
+
+A number of residents' concerns were raised and addressed:
+
+(a) Generator noise from Block D, Unit 7. The resident had been spoken to and has agreed to a routine daytime servicing schedule and to fit a sound deadening cover. The committee will carry out a follow-up check on 10th August.
+
+(b) Visitor pass system. Several homeowners said that guests arriving after the 10:00 PM pedestrian gate closing time are sometimes kept waiting at the vehicle gate. Security confirmed the vehicle gate is the only official after-hours access and that a valid pass remains the best way to speed an entry. A reminder is to be included in the next neighbourhood alert.
+
+(c) Drainage blockage between Block C and the access road. The maintenance crew is to carry out desilting of the affected drain on 4th August and to report whether any underground structural issues are causing the repeated blockage.
+
+(d) Playground safety. A parent raised concern about the worn safety mat beneath the swings. Management has already purchased replacement tiles and installation is planned for the weekend of 9th August.
+
+5. RESOLUTIONS ADOPTED
+
+The following resolutions were adopted by the meeting:
+
+(i) Management is to issue a revised statement of accounts for the quarter to all households before 15th September 2026.
+(ii) The Executive will pay the final instalment due on the fence project once the engineers certify the works as complete.
+(iii) The location of the monthly clean-up exercise is moved to the OWNED Saturday of every month effective October 2026, with a special estate wide clean-up on 29th August to take advantage of the school break.
+(iv) Households keeping more than two vehicles on their property are to contact the management by 25th August 2026 in order to avoid a breach of the Parking Rules.
+
+6. ANY OTHER BUSINESS
+
+The establishment of an independent clinic at the estate entrance was discussed again. An exploratory sub-committee of three volunteers — Dr. Bisi Osemene, Engr. Jide Akande and Mr. Rotimi Akeredolu — was formed to survey residents by 2nd September and present a feasibility note to the committee.
+
+Two households also announced upcoming naming ceremonies and religious harvest programmes; the caretaker was reminded that events in the Estate Hall must be booked through the admin office at least five working days in advance.
+
+7. ADJOURNMENT
+
+There being no further business, the meeting was adjourned at 6:38 PM.
+
+Signed:
+Mrs. Funmilayo Adeyemi
+Secretary — Palm Court Estate Association`;
+
+  const securityReport = `SECURITY COMMITTEE MEETING — PALM COURT ESTATE
+Date: 30th July 2026 | Venue: Admin Office | Time: 6:30 PM
+
+1. GATE STAFFING REVIEW
+
+The gate roster for July was reviewed. The estate has two full-time day shift officers, two full-time night shift officers, with two relief personnel covering leave and weekends. It was observed that the weekend evening shift at the pedestrian gate was left uncovered on three Sundays in July. The Head of Security was directed to revise the roster so that these hours are covered going forward.
+
+2. VISITOR PASS POLICY
+
+The system for issuing and managing visitor passes was reviewed. The estate processes an average of 29 visitors per day, with about 3 overnight passes. Concern was raised about passes being scanned after they have expired. The committee agreed that guard posts will now have a laminated instruction card stating clearly: "No entry — pass must scan" to avoid confusion and to maintain consistency.
+
+3. CCTV UPGRADE PROPOSAL
+
+A proposal for an upgraded CCTV system was tabled: five new cameras at the three gate posts, the pump house and the administrative block, together with a new 16-channel recorder and one year of maintenance, quoted at ₦1,850,000. This amount can be met from the security fund reserve of ₦2,100,000, so no additional levy is proposed. Members agreed to forward the proposal to the Estate Management Committee for approval.
+
+4. NEXT MEETING
+
+The next meeting of this committee will be held on Thursday, 13th August 2026, at 6:30 PM at the Estate Hall.
+
+Signed:
+Mrs. Funmilayo Adeyemi
+Secretary — Security Committee`;
+
   const meetings = [
     {
       id: 'm1',
@@ -166,7 +254,8 @@ async function main() {
       time: '5:00 PM',
       location: 'Estate Hall',
       agenda: ['Q2 financial review', 'Perimeter fence project update', 'Resident concerns & Q&A'],
-      scheduledAt: new Date(now + 9 * day),
+      scheduledAt: new Date(now - 20 * day),
+      report: q3Report,
     },
     {
       id: 'm2',
@@ -175,11 +264,16 @@ async function main() {
       time: '6:30 PM',
       location: 'Admin Office',
       agenda: ['Gate staffing review', 'Visitor pass policy', 'CCTV upgrade proposal'],
-      scheduledAt: new Date(now + 5 * day),
+      scheduledAt: new Date(now - 24 * day),
+      report: securityReport,
     },
   ];
   for (const m of meetings) {
-    await prisma.meeting.upsert({ where: { id: m.id }, update: {}, create: { ...m, estateId } });
+    await prisma.meeting.upsert({
+      where: { id: m.id },
+      update: { report: m.report, scheduledAt: m.scheduledAt },
+      create: { ...m, estateId },
+    });
   }
 
   const projects = [

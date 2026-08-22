@@ -37,13 +37,13 @@ export class MeetingsController {
 
   @Post('admin')
   @Roles('ADMIN')
-  adminCreate(@CurrentUser() user: AuthUser, @Body() data: { title: string; date: string; time: string; location: string; agenda: string[] }) {
+  adminCreate(@CurrentUser() user: AuthUser, @Body() data: { title: string; date: string; time: string; location: string; agenda: string[]; report?: string }) {
     return this.meetings.adminCreate(user.estateId, data);
   }
 
   @Patch('admin/:id')
   @Roles('ADMIN')
-  adminUpdate(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() data: { title: string; date: string; time: string; location: string; agenda: string[] }) {
+  adminUpdate(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() data: { title: string; date: string; time: string; location: string; agenda: string[]; report?: string }) {
     return this.meetings.adminUpdate(user.estateId, id, data);
   }
 
@@ -51,5 +51,27 @@ export class MeetingsController {
   @Roles('ADMIN')
   adminDelete(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.meetings.adminDelete(user.estateId, id);
+  }
+
+  @Post('admin/:id/reprocess')
+  @Roles('ADMIN')
+  adminReprocess(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.meetings.adminReprocess(user.estateId, id);
+  }
+
+  @Patch('admin/:id/extraction')
+  @Roles('ADMIN')
+  adminUpdateExtraction(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() data: { topics?: string[]; decisions?: string[]; actionItems?: string[] },
+  ) {
+    return this.meetings.adminUpdateExtraction(user.estateId, id, data);
+  }
+
+  @Post('admin/:id/approve')
+  @Roles('ADMIN')
+  adminApproveExtraction(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.meetings.adminApproveExtraction(user.estateId, user.sub, id);
   }
 }
