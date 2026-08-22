@@ -23,6 +23,12 @@ export class PaymentsService {
     if (dto.purpose === 'LEVY' && !dto.levyId) {
       throw new BadRequestException('levyId is required when purpose is LEVY');
     }
+    if (dto.purpose === 'DUES' || dto.purpose === 'LEVY') {
+      const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { duesLiable: true } });
+      if (!user.duesLiable) {
+        throw new BadRequestException('Dues and levies for this household are managed by the resident who invited you.');
+      }
+    }
 
     const reference = `PSK-${Date.now()}-${crypto.randomInt(1000, 9999)}`;
     await this.prisma.payment.create({

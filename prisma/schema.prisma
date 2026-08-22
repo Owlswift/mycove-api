@@ -62,6 +62,7 @@ model Estate {
   utilityPurchases   UtilityPurchase[]
   wallets            Wallet[]
   walletTransactions WalletTransaction[]
+  householdInvites   HouseholdInvite[]
 }
 
 model User {
@@ -80,32 +81,93 @@ model User {
   mustResetPassword     Boolean  @default(false)
   active                Boolean  @default(true)
   createdAt             DateTime @default(now())
+  /// False for a resident who joined via a household invitation — their
+  /// household's dues/levy obligation is already covered by whoever
+  /// invited them (see invitedById), so they're excluded from every
+  /// dues/levy accrual and roster query rather than being charged again.
+  duesLiable            Boolean  @default(true)
+  /// Set only for accounts created by accepting a HouseholdInvite — the
+  /// resident who sent that invite. Self-relation, not the invite row
+  /// itself, so "my household members" is a simple findMany once the
+  /// account exists.
+  invitedById           String?
 
-  estate             Estate               @relation(fields: [estateId], references: [id], onDelete: Cascade)
-  announcementReads  AnnouncementRead[]
-  calendarEntries    CalendarEntry[]
-  duesLedgerEntries  DuesLedgerEntry[]
-  levyPayments       LevyPayment[]
-  payments           Payment[]
-  visitorPasses      VisitorPass[]       @relation("ResidentPasses")
-  guardLogEntries    AccessLogEntry[]    @relation("GuardEntries")
-  projectDonations   ProjectDonation[]
-  projectPledges     ProjectPledge[]
-  pollVotes          PollVote[]
-  notifications      Notification[]
-  complaints         Complaint[]
-  passwordResetOtps  PasswordResetOtp[]
-  deviceTokens       DeviceToken[]
-  sessions           Session[]
-  projectAllocations ProjectAllocation[] @relation("AllocatedBy")
-  invoicesRaised     Invoice[]           @relation("InvoiceRaisedBy")
-  invoicesReviewed   Invoice[]           @relation("InvoiceReviewedBy")
-  utilityMeters      UtilityMeter[]
-  utilityPurchases   UtilityPurchase[]
-  wallet             Wallet?
-  walletTransactions WalletTransaction[]
+  estate                   Estate              @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  invitedBy                User?               @relation("HouseholdInviter", fields: [invitedById], references: [id])
+  householdMembers         User[]              @relation("HouseholdInviter")
+  householdInvitesSent     HouseholdInvite[]   @relation("HouseholdInviteSender")
+  householdInvitesReviewed HouseholdInvite[]   @relation("HouseholdInviteReviewer")
+  householdInviteAccepted  HouseholdInvite[]   @relation("HouseholdInviteAcceptedUser")
+  announcementReads        AnnouncementRead[]
+  calendarEntries          CalendarEntry[]
+  duesLedgerEntries        DuesLedgerEntry[]
+  levyPayments             LevyPayment[]
+  payments                 Payment[]
+  visitorPasses            VisitorPass[]       @relation("ResidentPasses")
+  guardLogEntries          AccessLogEntry[]    @relation("GuardEntries")
+  projectDonations         ProjectDonation[]
+  projectPledges           ProjectPledge[]
+  pollVotes                PollVote[]
+  notifications            Notification[]
+  complaints               Complaint[]
+  passwordResetOtps        PasswordResetOtp[]
+  deviceTokens             DeviceToken[]
+  sessions                 Session[]
+  projectAllocations       ProjectAllocation[] @relation("AllocatedBy")
+  invoicesRaised           Invoice[]           @relation("InvoiceRaisedBy")
+  invoicesReviewed         Invoice[]           @relation("InvoiceReviewedBy")
+  utilityMeters            UtilityMeter[]
+  utilityPurchases         UtilityPurchase[]
+  wallet                   Wallet?
+  walletTransactions       WalletTransaction[]
 
   @@index([estateId])
+}
+
+enum HouseholdInviteStatus {
+  PENDING_ADMIN_APPROVAL
+  APPROVED
+  REJECTED
+  ACCEPTED
+}
+
+/// A resident inviting another person to become their own, fully
+/// independent CommunityHub account — not a sub-user, not a shared login —
+/// while exempting that person from a second, duplicate dues/levy
+/// obligation (see User.duesLiable). No SMS/OTP involved (real cost, and
+/// this app has no SMS provider anyway): the moment an admin approves the
+/// invite, the User account is created right away with a random one-time
+/// access code as its password (mustResetPassword: true) — the inviter
+/// relays that code to the invitee out-of-band, they log in with their
+/// phone + the code through the exact same login screen and force-reset
+/// flow every admin-created account already goes through, and the code is
+/// cleared the moment that first password reset completes (see
+/// AuthService.completeForceReset).
+model HouseholdInvite {
+  id                 String                @id @default(cuid())
+  estateId           String
+  invitedByUserId    String
+  invitedPhone       String
+  invitedFullName    String
+  status             HouseholdInviteStatus @default(PENDING_ADMIN_APPROVAL)
+  createdAt          DateTime              @default(now())
+  respondedAt        DateTime?
+  respondedByAdminId String?
+  /// The one-time login password shown to the inviter on "My Household"
+  /// until the invitee actually uses it — cleared (set null) the moment
+  /// they complete their first-login password reset, at which point
+  /// status flips to ACCEPTED and acceptedAt is stamped.
+  accessCode         String?
+  acceptedUserId     String?
+  acceptedAt         DateTime?
+
+  estate           Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  invitedBy        User   @relation("HouseholdInviteSender", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  respondedByAdmin User?  @relation("HouseholdInviteReviewer", fields: [respondedByAdminId], references: [id])
+  acceptedUser     User?  @relation("HouseholdInviteAcceptedUser", fields: [acceptedUserId], references: [id])
+
+  @@index([estateId])
+  @@index([invitedPhone])
 }
 
 enum DevicePlatform {
@@ -679,8 +741,8 @@ model UtilityMeter {
   meterType    MeterType
   customerName String?
   address      String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   estate    Estate            @relation(fields: [estateId], references: [id], onDelete: Cascade)
   user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)

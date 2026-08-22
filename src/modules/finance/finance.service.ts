@@ -226,7 +226,7 @@ export class FinanceService {
   async residentDues(estateId: string, year: number) {
     const [residents, duesPayments, monthlyAmount] = await Promise.all([
       this.prisma.user.findMany({
-        where: { role: 'RESIDENT', estateId },
+        where: { role: 'RESIDENT', estateId, duesLiable: true },
         select: { id: true, fullName: true, house: true, phone: true, createdAt: true },
         orderBy: { fullName: 'asc' },
       }),
@@ -284,7 +284,7 @@ export class FinanceService {
   async residentLevies(estateId: string, year: number) {
     const [residents, levies, levyPayments] = await Promise.all([
       this.prisma.user.findMany({
-        where: { role: 'RESIDENT', estateId },
+        where: { role: 'RESIDENT', estateId, duesLiable: true },
         select: { id: true, fullName: true, house: true },
         orderBy: { fullName: 'asc' },
       }),

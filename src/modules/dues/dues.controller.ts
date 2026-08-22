@@ -17,6 +17,12 @@ export class DuesController {
     return this.dues.getDues(user.sub);
   }
 
+  @Get('dues/owing')
+  @Roles('GUARD')
+  listOwingResidents(@CurrentUser() user: AuthUser) {
+    return this.dues.listOwingResidents(user.estateId);
+  }
+
   @Get('levies')
   listLevies(@CurrentUser() user: AuthUser) {
     return this.dues.listLevies(user.sub, user.estateId);

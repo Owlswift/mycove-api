@@ -23,6 +23,7 @@ import { EstatesModule } from './modules/estates/estates.module';
 import { UtilitiesModule } from './modules/utilities/utilities.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { VoiceModule } from './modules/voice/voice.module';
+import { HouseholdModule } from './modules/household/household.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { VoiceModule } from './modules/voice/voice.module';
     UtilitiesModule,
     WalletModule,
     VoiceModule,
+    HouseholdModule,
   ],
 })
 export class AppModule {}

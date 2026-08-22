@@ -8,7 +8,7 @@ export class UsersService {
   async me(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { estate: true },
+      include: { estate: true, invitedBy: { select: { fullName: true } } },
     });
     if (!user) throw new NotFoundException('User not found');
 
@@ -34,6 +34,8 @@ export class UsersService {
       hasPin: user.pinHash != null,
       estateName: user.estate.name,
       estateAddress: user.estate.address,
+      duesLiable: user.duesLiable,
+      invitedByName: user.invitedBy?.fullName ?? null,
     };
   }
 }

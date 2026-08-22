@@ -42,7 +42,7 @@ export class FinanceController {
   }
 
   @Post('dues/:residentId/record-payment')
-  @Roles('FINANCE_SECRETARY')
+  @Roles('ADMIN', 'FINANCE_SECRETARY')
   recordDuesPayment(
     @CurrentUser() user: AuthUser,
     @Param('residentId') residentId: string,

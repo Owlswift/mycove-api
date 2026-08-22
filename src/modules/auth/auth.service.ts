@@ -65,28 +65,47 @@ export class AuthService {
       });
     }
 
-    const accessToken = await this.signAccessToken(user.id, user.role, user.estateId);
-    const refresh = await this.signRefreshToken(user.id);
+    const { accessToken, refreshToken } = await this.issueSessionTokens(
+      user.id,
+      user.role,
+      user.estateId,
+      dto.platform,
+      dto.deviceName,
+    );
+
+    return {
+      accessToken,
+      refreshToken,
+      mustResetPassword: user.mustResetPassword,
+    };
+  }
+
+  /** Shared by login() and by household-invite acceptance (HouseholdService) — anywhere a user needs to walk away logged in without having gone through the password-check step above. */
+  async issueSessionTokens(
+    userId: string,
+    role: string,
+    estateId: string,
+    platform?: 'ANDROID' | 'IOS',
+    deviceName?: string,
+  ) {
+    const accessToken = await this.signAccessToken(userId, role, estateId);
+    const refresh = await this.signRefreshToken(userId);
 
     // Web/admin logins don't send a platform — there's no "device" to
     // track a session for in that case, so this stays mobile-only.
-    if (dto.platform) {
+    if (platform) {
       await this.prisma.session.create({
         data: {
-          userId: user.id,
-          estateId: user.estateId,
+          userId,
+          estateId,
           jti: refresh.jti,
-          platform: dto.platform,
-          deviceName: dto.deviceName,
+          platform,
+          deviceName,
         },
       });
     }
 
-    return {
-      accessToken,
-      refreshToken: refresh.token,
-      mustResetPassword: user.mustResetPassword,
-    };
+    return { accessToken, refreshToken: refresh.token };
   }
 
   // Always returns the same shape regardless of whether the phone number
@@ -200,6 +219,17 @@ export class AuthService {
         }),
       },
     });
+
+    // If this account exists because a household invite was approved (see
+    // HouseholdService.approveInvite), completing this same force-reset
+    // flow is exactly the "invitee actually logged in" moment — clear the
+    // one-time access code so it can't be reused/re-shown, and record the
+    // real join date for the inviter/admin's "who joined and when" views.
+    await this.prisma.householdInvite.updateMany({
+      where: { acceptedUserId: userId, status: 'APPROVED' },
+      data: { status: 'ACCEPTED', acceptedAt: new Date(), accessCode: null },
+    });
+
     return { message: 'Password set. You can now use the app.' };
   }
 

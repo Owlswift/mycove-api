@@ -85,18 +85,37 @@ export class DuesService {
   async getDues(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { createdAt: true, estateId: true },
+      select: {
+        createdAt: true,
+        estateId: true,
+        duesLiable: true,
+        invitedById: true,
+        invitedBy: { select: { fullName: true, createdAt: true } },
+      },
     });
+
+    // A household member invited in by another resident doesn't accrue a
+    // second, duplicate dues obligation — their household's dues are
+    // already covered by whoever invited them. They can still see that
+    // household's actual balance/history (read-only), just not pay it
+    // themselves — see DuesController's payment endpoints, which stay
+    // keyed off the liable resident's own account.
+    const liableUserId = user.duesLiable ? userId : user.invitedById;
+    const accrualStart = user.duesLiable ? user.createdAt : user.invitedBy?.createdAt;
+    if (!liableUserId || !accrualStart) {
+      return { balance: 0, monthsPaid: 0, history: [], liable: false, invitedByName: user.invitedBy?.fullName ?? null };
+    }
+
     const [payments, monthlyAmount] = await Promise.all([
       this.prisma.duesLedgerEntry.findMany({
-        where: { userId, type: 'PAYMENT' },
+        where: { userId: liableUserId, type: 'PAYMENT' },
         orderBy: { createdAt: 'desc' },
       }),
       this.getMonthlyDuesAmount(user.estateId),
     ]);
 
-    const { balance, monthsPaid, monthsElapsed, accrualStart } = computeDuesAccrual(
-      user.createdAt,
+    const { balance, monthsPaid, monthsElapsed, accrualStart: rangeStart } = computeDuesAccrual(
+      accrualStart,
       payments,
       monthlyAmount,
     );
@@ -104,7 +123,7 @@ export class DuesService {
     // Synthesized, one per elapsed month — dues aren't manually charged, so
     // there's no stored row to show; this is purely a display line.
     const charges = Array.from({ length: monthsElapsed }, (_, i) => {
-      const monthDate = new Date(accrualStart.getFullYear(), accrualStart.getMonth() + i, 1);
+      const monthDate = new Date(rangeStart.getFullYear(), rangeStart.getMonth() + i, 1);
       return {
         id: `charge-${monthDate.getFullYear()}-${monthDate.getMonth()}`,
         date: monthDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
@@ -119,7 +138,52 @@ export class DuesService {
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     );
 
-    return { balance, monthsPaid, history };
+    return { balance, monthsPaid, history, liable: user.duesLiable, invitedByName: user.invitedBy?.fullName ?? null };
+  }
+
+  /**
+   * The security desk's view into who owes dues — same accrual math as a
+   * resident's own `getDues()`, run across every resident in the estate at
+   * once. Guards can't see amounts residents pay each other or project
+   * donations, just this one estate-obligation list, which is the thing
+   * they're actually asked about at the gate ("is this house owing?").
+   */
+  async listOwingResidents(estateId: string) {
+    const [residents, monthlyAmount] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { estateId, role: 'RESIDENT', active: true, duesLiable: true },
+        select: {
+          id: true,
+          fullName: true,
+          house: true,
+          createdAt: true,
+          duesLedgerEntries: {
+            where: { type: 'PAYMENT' },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      }),
+      this.getMonthlyDuesAmount(estateId),
+    ]);
+
+    return residents
+      .map((r) => {
+        const { balance, monthsElapsed, monthsPaid } = computeDuesAccrual(
+          r.createdAt,
+          r.duesLedgerEntries,
+          monthlyAmount,
+        );
+        return {
+          userId: r.id,
+          fullName: r.fullName,
+          house: r.house,
+          balance,
+          monthsOwed: Math.max(0, monthsElapsed - monthsPaid),
+          lastPaidAt: r.duesLedgerEntries[0]?.createdAt ?? null,
+        };
+      })
+      .filter((r) => r.balance > 0)
+      .sort((a, b) => b.monthsOwed - a.monthsOwed);
   }
 
   /** Finance Secretary reconciling a payment that didn't come through Paystack — cash, bank transfer, etc. paid directly into the estate's account. A receipt image is the evidence; the note is just an optional label. */
@@ -145,18 +209,39 @@ export class DuesService {
   }
 
   async listLevies(userId: string, estateId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { duesLiable: true, invitedById: true, invitedBy: { select: { fullName: true } } },
+    });
+    // Same household-sharing rule as getDues() — a non-liable member sees
+    // the actual household levies (read-only), resolved off whoever
+    // invited them, not an empty list.
+    const liableUserId = user.duesLiable ? userId : user.invitedById;
+    if (!liableUserId) {
+      return { levies: [], liable: false, invitedByName: user.invitedBy?.fullName ?? null };
+    }
+
     const [levies, payments] = await Promise.all([
       this.prisma.levy.findMany({ where: { estateId } }),
       this.prisma.levyPayment.findMany({
-        where: { userId },
+        where: { userId: liableUserId },
         select: { levyId: true },
       }),
     ]);
     const paidIds = new Set(payments.map((p) => p.levyId));
-    return levies.map((l) => ({ ...l, paid: paidIds.has(l.id) }));
+    return {
+      levies: levies.map((l) => ({ ...l, paid: paidIds.has(l.id) })),
+      liable: user.duesLiable,
+      invitedByName: user.invitedBy?.fullName ?? null,
+    };
   }
 
   async payLevy(userId: string, estateId: string, levyId: string, mediaBase64?: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { duesLiable: true } });
+    if (!user.duesLiable) {
+      throw new ConflictException('Dues and levies for this household are managed by the resident who invited you.');
+    }
+
     const levy = await this.prisma.levy.findFirst({ where: { id: levyId, estateId } });
     if (!levy) throw new NotFoundException('Levy not found');
 
