@@ -95,7 +95,7 @@ export class DuesService {
       this.getMonthlyDuesAmount(user.estateId),
     ]);
 
-    const { balance, monthsElapsed, accrualStart } = computeDuesAccrual(
+    const { balance, monthsPaid, monthsElapsed, accrualStart } = computeDuesAccrual(
       user.createdAt,
       payments,
       monthlyAmount,
@@ -119,7 +119,7 @@ export class DuesService {
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     );
 
-    return { balance, history };
+    return { balance, monthsPaid, history };
   }
 
   /** Finance Secretary reconciling a payment that didn't come through Paystack — cash, bank transfer, etc. paid directly into the estate's account. A receipt image is the evidence; the note is just an optional label. */

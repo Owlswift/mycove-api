@@ -15,6 +15,7 @@ import { BuyElectricityDto } from './dto/buy-electricity.dto';
 import { BuyAirtimeDto } from './dto/buy-airtime.dto';
 import { VtpassProvider } from './providers/vtpass.provider';
 import { BuypowerProvider } from './providers/buypower.provider';
+import { WalletService } from '../wallet/wallet.service';
 import type {
   AirtimeVendResult,
   ElectricityVendResult,
@@ -90,6 +91,7 @@ export class UtilitiesService {
 
   constructor(
     private prisma: PrismaService,
+    private wallet: WalletService,
     vtpass: VtpassProvider,
     buypower: BuypowerProvider,
   ) {
@@ -163,6 +165,11 @@ export class UtilitiesService {
     estateId: string,
     dto: BuyElectricityDto,
   ) {
+    // Checked up front, before touching the meter or calling a provider
+    // that can take up to 45s — no reason to make a resident wait on a
+    // slow VTpass/BuyPower round trip just to be told they can't afford it.
+    await this.assertSufficientBalance(userId, estateId, dto.amount);
+
     const meter = await this.prisma.utilityMeter.findFirst({
       where: { id: dto.meterId, userId, estateId },
     });
@@ -193,10 +200,17 @@ export class UtilitiesService {
         }),
       purchase.id,
     );
-    return this.finalizePurchase(purchase.id, outcome);
+    return this.finalizePurchase(purchase.id, outcome, {
+      userId,
+      estateId,
+      amount: dto.amount,
+      requestId,
+    });
   }
 
   async buyAirtime(userId: string, estateId: string, dto: BuyAirtimeDto) {
+    await this.assertSufficientBalance(userId, estateId, dto.amount);
+
     const requestId = generateRequestId();
     const purchase = await this.prisma.utilityPurchase.create({
       data: {
@@ -220,7 +234,23 @@ export class UtilitiesService {
         }),
       purchase.id,
     );
-    return this.finalizePurchase(purchase.id, outcome);
+    return this.finalizePurchase(purchase.id, outcome, {
+      userId,
+      estateId,
+      amount: dto.amount,
+      requestId,
+    });
+  }
+
+  private async assertSufficientBalance(
+    userId: string,
+    estateId: string,
+    amount: number,
+  ): Promise<void> {
+    const balance = await this.wallet.getBalance(userId, estateId);
+    if (balance < amount) {
+      throw new BadRequestException('Insufficient wallet balance.');
+    }
   }
 
   /**
@@ -264,6 +294,18 @@ export class UtilitiesService {
             data?.response_description ||
             `VTpass callback reported code ${data?.code}.`,
         },
+      });
+      // The wallet was already debited when this went PENDING (see
+      // finalizePurchase) — now that it's a confirmed failure, give it
+      // back. `-refund` keeps the reference distinct from the original
+      // debit's (the requestId itself), since both share a wallet.
+      await this.wallet.refund({
+        userId: purchase.userId,
+        estateId: purchase.estateId,
+        amount: purchase.amount,
+        reference: `${purchase.requestId}-refund`,
+        description: 'Refund: utility purchase failed after pending',
+        utilityPurchaseId: purchase.id,
       });
     }
     return { response: 'success' };
@@ -358,10 +400,35 @@ export class UtilitiesService {
     };
   }
 
+  /**
+   * Debits the wallet on both SUCCESSFUL and PENDING outcomes — a 099
+   * "still processing" response means VTpass has already accepted the
+   * request, so the money is effectively committed on their end too.
+   * [handleVtpassCallback] refunds it if a pending purchase later resolves
+   * to a real failure. A rejected/unavailable outcome never touches the
+   * wallet at all, since nothing was ever committed.
+   */
   private async finalizePurchase<
     T extends ElectricityVendResult | AirtimeVendResult,
-  >(purchaseId: string, outcome: Outcome<T>) {
+  >(
+    purchaseId: string,
+    outcome: Outcome<T>,
+    wallet: {
+      userId: string;
+      estateId: string;
+      amount: number;
+      requestId: string;
+    },
+  ) {
     if ('pending' in outcome) {
+      await this.wallet.debit({
+        userId: wallet.userId,
+        estateId: wallet.estateId,
+        amount: wallet.amount,
+        reference: wallet.requestId,
+        description: 'Utility purchase (pending confirmation)',
+        utilityPurchaseId: purchaseId,
+      });
       return this.prisma.utilityPurchase.update({
         where: { id: purchaseId },
         data: { status: 'PENDING' },
@@ -378,6 +445,14 @@ export class UtilitiesService {
     }
     const { providerName, result } = outcome;
     const electricityResult = isElectricityResult(result) ? result : null;
+    await this.wallet.debit({
+      userId: wallet.userId,
+      estateId: wallet.estateId,
+      amount: wallet.amount,
+      reference: wallet.requestId,
+      description: 'Utility purchase',
+      utilityPurchaseId: purchaseId,
+    });
     return this.prisma.utilityPurchase.update({
       where: { id: purchaseId },
       data: {

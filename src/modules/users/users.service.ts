@@ -31,6 +31,7 @@ export class UsersService {
       vehiclePlates: user.vehiclePlates,
       initials,
       mustResetPassword: user.mustResetPassword,
+      hasPin: user.pinHash != null,
       estateName: user.estate.name,
       estateAddress: user.estate.address,
     };

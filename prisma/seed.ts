@@ -48,6 +48,16 @@ async function main() {
     },
   });
 
+  // No real top-up gateway is wired up yet — seeded here so the wallet
+  // ledger (debit-on-purchase, refund-on-late-failure) is testable end to
+  // end without one. update:{} on reseed so a test run's spending doesn't
+  // get silently topped back up every time you re-seed.
+  await prisma.wallet.upsert({
+    where: { userId: resident.id },
+    update: {},
+    create: { estateId, userId: resident.id, balance: 50000 },
+  });
+
   const guard = await prisma.user.upsert({
     where: { phone: normalizePhone('08052229981') },
     update: { passwordHash: guardPasswordHash },

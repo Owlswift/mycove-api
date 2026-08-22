@@ -60,6 +60,8 @@ model Estate {
   complaints         Complaint[]
   utilityMeters      UtilityMeter[]
   utilityPurchases   UtilityPurchase[]
+  wallets            Wallet[]
+  walletTransactions WalletTransaction[]
 }
 
 model User {
@@ -67,6 +69,7 @@ model User {
   estateId              String
   phone                 String   @unique
   passwordHash          String
+  pinHash               String?
   role                  Role
   fullName              String
   house                 String?
@@ -99,6 +102,8 @@ model User {
   invoicesReviewed   Invoice[]           @relation("InvoiceReviewedBy")
   utilityMeters      UtilityMeter[]
   utilityPurchases   UtilityPurchase[]
+  wallet             Wallet?
+  walletTransactions WalletTransaction[]
 
   @@index([estateId])
 }
@@ -740,4 +745,55 @@ model ElectricityDisco {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum WalletTransactionType {
+  TOPUP
+  PURCHASE_DEBIT
+  REFUND
+}
+
+/// One wallet per resident — [balance] is the single source of truth,
+/// always updated in the same DB transaction as the WalletTransaction row
+/// that explains the change (see WalletService.credit/debit), so the two
+/// can never drift out of sync.
+model Wallet {
+  id        String   @id @default(cuid())
+  estateId  String
+  userId    String   @unique
+  balance   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  estate       Estate              @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  @@index([estateId])
+}
+
+/// Append-only ledger — [amount] is always positive, [type] gives the
+/// direction. [reference] is a unique idempotency key (for a purchase
+/// debit/refund, the same requestId already used for the VTpass/BuyPower
+/// call — see UtilitiesService — so a retried request can't double-debit).
+model WalletTransaction {
+  id                String                @id @default(cuid())
+  estateId          String
+  userId            String
+  walletId          String
+  type              WalletTransactionType
+  amount            Int
+  balanceAfter      Int
+  reference         String                @unique
+  description       String?
+  utilityPurchaseId String?
+  createdAt         DateTime              @default(now())
+
+  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([estateId])
+  @@index([userId])
+  @@index([walletId])
 }

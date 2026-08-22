@@ -7,6 +7,8 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { CompleteForceResetDto } from './dto/complete-force-reset.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { LogoutDto } from './dto/logout.dto';
+import { SetPinDto } from './dto/set-pin.dto';
+import { VerifyPinDto } from './dto/verify-pin.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/decorators/current-user.decorator';
@@ -65,5 +67,17 @@ export class AuthController {
   @Delete('sessions/:id')
   revokeSession(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.auth.revokeSession(user.sub, user.estateId, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('pin/set')
+  setPin(@CurrentUser() user: AuthUser, @Body() dto: SetPinDto) {
+    return this.auth.setPin(user.sub, dto.pin);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('pin/verify')
+  async verifyPin(@CurrentUser() user: AuthUser, @Body() dto: VerifyPinDto) {
+    return { valid: await this.auth.verifyPin(user.sub, dto.pin) };
   }
 }

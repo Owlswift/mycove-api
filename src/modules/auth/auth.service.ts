@@ -323,4 +323,16 @@ export class AuthService {
     await this.prisma.session.delete({ where: { id } });
     return { message: 'Device logged out.' };
   }
+
+  async setPin(userId: string, pin: string) {
+    const pinHash = await argon2.hash(pin);
+    await this.prisma.user.update({ where: { id: userId }, data: { pinHash } });
+    return { message: 'Transaction PIN set.' };
+  }
+
+  async verifyPin(userId: string, pin: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.pinHash) return false;
+    return argon2.verify(user.pinHash, pin);
+  }
 }
