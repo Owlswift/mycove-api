@@ -206,7 +206,7 @@ The following resolutions were adopted by the meeting:
 
 (i) Management is to issue a revised statement of accounts for the quarter to all households before 15th September 2026.
 (ii) The Executive will pay the final instalment due on the fence project once the engineers certify the works as complete.
-(iii) The location of the monthly clean-up exercise is moved to the OWNED Saturday of every month effective October 2026, with a special estate wide clean-up on 29th August to take advantage of the school break.
+(iii) The monthly clean-up exercise is moved to the LAST Saturday of every month effective October 2026, with a special estate-wide clean-up on 29th August to take advantage of the school break.
 (iv) Households keeping more than two vehicles on their property are to contact the management by 25th August 2026 in order to avoid a breach of the Parking Rules.
 
 6. ANY OTHER BUSINESS
