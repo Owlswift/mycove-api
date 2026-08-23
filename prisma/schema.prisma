@@ -63,6 +63,7 @@ model Estate {
   wallets            Wallet[]
   walletTransactions WalletTransaction[]
   householdInvites   HouseholdInvite[]
+  voiceLogs          VoiceInteractionLog[]
 }
 
 model User {
@@ -121,6 +122,7 @@ model User {
   wallet                   Wallet?
   walletTransactions       WalletTransaction[]
   meetingsApproved         Meeting[]           @relation("MeetingApprover")
+  voiceLogs                VoiceInteractionLog[]
 
   @@index([estateId])
 }
@@ -308,7 +310,34 @@ model Meeting {
   estate          Estate          @relation(fields: [estateId], references: [id], onDelete: Cascade)
   calendarEntries CalendarEntry[]
   approvedByAdmin User?           @relation("MeetingApprover", fields: [approvedByAdminId], references: [id])
+  reminders       MeetingReminder[]
 
+  @@index([estateId])
+}
+
+enum MeetingReminderKind {
+  DAY_OF
+  TEN_MINUTES_BEFORE
+  STARTED
+}
+
+/// One row per (meeting, reminder kind) actually sent — the scheduler's
+/// dedup ledger. A minute-tick scanner queries upcoming meetings and tries
+/// to create these rows; the unique constraint makes each of the three
+/// reminders (day-of, T-10min, started) fire exactly once per meeting even
+/// across server restarts or overlapping ticks. Rows are cleared when a
+/// meeting is rescheduled (see MeetingsService.adminUpdate) so reminders
+/// re-arm against the new time.
+model MeetingReminder {
+  id        String              @id @default(cuid())
+  estateId  String
+  meetingId String
+  kind      MeetingReminderKind
+  sentAt    DateTime            @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, kind])
   @@index([estateId])
 }
 
@@ -325,6 +354,34 @@ model CalendarEntry {
 
   @@unique([userId, meetingId])
   @@index([estateId])
+}
+
+/// One recorded voice-assistant turn from the mobile app: the raw STT
+/// transcript, which intent the on-device keyword parser selected (null =
+/// unparsed), the keyword(s) that fired (the parser's own explanation of
+/// its choice), extracted parameters, and what the assistant replied or
+/// where it navigated. Purely an analysis dataset — batches are reviewed
+/// offline to find misclassifications, repeated STT variants ("owing"→
+/// "going", "debt"→"date"), confused intents, and false-positive rules,
+/// which become reviewed parser changes. Never read by any resident-facing
+/// feature.
+model VoiceInteractionLog {
+  id               String   @id @default(cuid())
+  estateId         String
+  userId           String
+  transcript       String
+  intent           String?
+  matchedBy        String[] @default([])
+  parameters       Json?
+  response         String?
+  navigationTarget String?
+  createdAt        DateTime @default(now())
+
+  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([estateId, createdAt])
+  @@index([userId])
 }
 
 enum DuesEntryType {

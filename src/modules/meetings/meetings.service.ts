@@ -199,6 +199,15 @@ export class MeetingsService {
     // extraction or un-approve an already-reviewed report.
     const aiFields: Partial<AiFields> = report !== meeting.report ? await this._extract(report) : {};
 
+    const newScheduledAt = new Date(`${data.date} ${data.time}`);
+    // A moved meeting must re-arm its push reminders: rows already sent for
+    // the old time would otherwise suppress the day-of/T-10/started pushes
+    // at the new time (the dedup ledger is keyed by meeting+kind, not by
+    // time). Deleting them lets the scheduler treat it as fresh.
+    if (newScheduledAt.getTime() !== meeting.scheduledAt.getTime()) {
+      await this.prisma.meetingReminder.deleteMany({ where: { meetingId: id } });
+    }
+
     const updated = await this.prisma.meeting.update({
       where: { id },
       data: {
@@ -206,7 +215,7 @@ export class MeetingsService {
         date: data.date,
         time: data.time,
         location: data.location,
-        scheduledAt: new Date(`${data.date} ${data.time}`),
+        scheduledAt: newScheduledAt,
         agenda: data.agenda,
         report,
         ...aiFields,

@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { VoiceCommandDto } from './dto/voice-command.dto';
+import { VoiceLogsDto } from './dto/voice-logs.dto';
 
 function formatNaira(amount: number): string {
   return `₦${new Intl.NumberFormat('en-NG').format(amount)}`;
@@ -203,5 +205,32 @@ export class VoiceService {
   private maskPhone(phone: string): string {
     if (phone.length < 7) return phone;
     return `${phone.slice(0, 4)}${'•'.repeat(phone.length - 7)}${phone.slice(-3)}`;
+  }
+
+  /**
+   * Stores a batch of on-device voice-turn logs (transcript + parser
+   * decision trail) — the analysis dataset behind the deterministic
+   * keyword parser: reviewed offline to find misclassifications, repeated
+   * STT variants ("owing"→"going", "debt"→"date"), confused intents, and
+   * false-positive rules. Write-only from the app's perspective; nothing
+   * resident-facing ever reads these rows back.
+   */
+  async uploadLogs(userId: string, estateId: string, dto: VoiceLogsDto) {
+    if (dto.logs.length === 0) return { stored: 0 };
+    await this.prisma.voiceInteractionLog.createMany({
+      data: dto.logs.map((l) => ({
+        estateId,
+        userId,
+        transcript: l.transcript,
+        intent: l.intent ?? null,
+        matchedBy: l.matchedBy ?? [],
+        ...(l.parameters !== undefined
+          ? { parameters: l.parameters as Prisma.InputJsonValue }
+          : {}),
+        response: l.response ?? null,
+        navigationTarget: l.navigationTarget ?? null,
+      })),
+    });
+    return { stored: dto.logs.length };
   }
 }

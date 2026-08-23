@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './database/prisma.module';
 import { CommonModule } from './common/common.module';
 import { HealthModule } from './modules/health/health.module';
@@ -24,10 +25,13 @@ import { UtilitiesModule } from './modules/utilities/utilities.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { HouseholdModule } from './modules/household/household.module';
+import { RemindersModule } from './modules/reminders/reminders.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // Powers the meeting-reminder scheduler (day-of / T-10min / started).
+    ScheduleModule.forRoot(),
     PrismaModule,
     CommonModule,
     HealthModule,
@@ -52,6 +56,8 @@ import { HouseholdModule } from './modules/household/household.module';
     WalletModule,
     VoiceModule,
     HouseholdModule,
+    // Daily 8am dues/levy/pledge reminder cron + admin "send reminders" endpoint.
+    RemindersModule,
   ],
 })
 export class AppModule {}
