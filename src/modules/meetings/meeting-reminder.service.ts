@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import type { Meeting, MeetingReminderKind } from '@prisma/client';
+import { AnalyticsService } from '../../common/analytics/analytics.service';
 import { PrismaService } from '../../database/prisma.service';
 import { PushService } from '../push/push.service';
 
@@ -46,6 +47,7 @@ export class MeetingReminderService {
   constructor(
     private prisma: PrismaService,
     private push: PushService,
+    private analytics: AnalyticsService,
   ) {}
 
   @Interval(60_000)
@@ -155,6 +157,12 @@ export class MeetingReminderService {
           title: message,
           type: 'meeting',
         })),
+      });
+      this.analytics.trackSystem('meeting_reminders_sent', {
+        meeting_id: meeting.id,
+        estate_id: meeting.estateId,
+        kind,
+        recipients: userIds.length,
       });
       await this.push.sendToUsers(userIds, {
         title: 'CommunityHub',

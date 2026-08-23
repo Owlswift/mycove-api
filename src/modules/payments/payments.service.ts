@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
+import { AnalyticsService } from '../../common/analytics/analytics.service';
 import { InitiatePaymentDto } from './dto/initiate-payment.dto';
 import { PAYMENT_GATEWAY } from './gateway/payment-gateway.interface';
 import type { PaymentGateway } from './gateway/payment-gateway.interface';
@@ -17,6 +18,7 @@ export class PaymentsService {
     private prisma: PrismaService,
     @Inject(PAYMENT_GATEWAY) private gateway: PaymentGateway,
     private notifications: NotificationsService,
+    private analytics: AnalyticsService,
   ) {}
 
   async initiate(userId: string, estateId: string, dto: InitiatePaymentDto) {
@@ -40,6 +42,12 @@ export class PaymentsService {
         levyId: dto.levyId,
         amount: dto.amount,
       },
+    });
+    this.analytics.track('payment_initiated', userId, {
+      purpose: dto.purpose,
+      amount: dto.amount,
+      estate_id: estateId,
+      reference,
     });
 
     const { authorizationUrl } = await this.gateway.initialize({
@@ -88,6 +96,17 @@ export class PaymentsService {
         });
       }
     });
+
+    this.analytics.track(
+      nextStatus === 'SUCCESS' ? 'payment_success' : 'payment_failed',
+      userId,
+      {
+        purpose: payment.purpose,
+        amount: payment.amount,
+        estate_id: payment.estateId,
+        reference,
+      },
+    );
 
     if (nextStatus === 'SUCCESS') {
       await this.notifications.create(

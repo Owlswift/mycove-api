@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma, WalletTransactionType } from '@prisma/client';
+import { AnalyticsService } from '../../common/analytics/analytics.service';
 import { PrismaService } from '../../database/prisma.service';
 
 interface LedgerParams {
@@ -13,7 +14,10 @@ interface LedgerParams {
 
 @Injectable()
 export class WalletService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private analytics: AnalyticsService,
+  ) {}
 
   private getOrCreateWallet(
     tx: Prisma.TransactionClient,
@@ -64,6 +68,14 @@ export class WalletService {
           description: params.description,
           utilityPurchaseId: params.utilityPurchaseId,
         },
+      }).then((tx2) => {
+        this.analytics.track('wallet_transaction', params.userId, {
+          type: tx2.type,
+          amount: tx2.amount,
+          balance_after: tx2.balanceAfter,
+          estate_id: params.estateId,
+        });
+        return tx2;
       });
     });
   }

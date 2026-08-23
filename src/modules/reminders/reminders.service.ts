@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { AnalyticsService } from '../../common/analytics/analytics.service';
 import { PrismaService } from '../../database/prisma.service';
 import { PushService } from '../push/push.service';
 import {
@@ -37,6 +38,7 @@ export class RemindersService {
   constructor(
     private prisma: PrismaService,
     private push: PushService,
+    private analytics: AnalyticsService,
   ) {}
 
   /** Daily at 8:00 server-local time — every estate's owing users get reminded. */
@@ -50,6 +52,10 @@ export class RemindersService {
           this.logger.log(
             `Daily payment reminders for estate ${estate.id}: ${JSON.stringify(counts)}`,
           );
+          this.analytics.trackSystem('payment_reminder_cron_ran', {
+            estate_id: estate.id,
+            ...counts,
+          });
         }
       }
     } catch (e) {
@@ -65,6 +71,16 @@ export class RemindersService {
       this.sendPledgeReminders(estateId),
     ]);
     return { dues, levies, pledges };
+  }
+
+  /** Called by the admin dashboard's "Send payment reminders" button. */
+  async sendManualSweep(estateId: string): Promise<ReminderCounts> {
+    const counts = await this.sendAllForEstate(estateId);
+    this.analytics.trackSystem('payment_reminders_sent_manual', {
+      estate_id: estateId,
+      ...counts,
+    });
+    return counts;
   }
 
   /** Residents whose calendar-accrued dues balance is above zero. */

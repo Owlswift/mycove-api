@@ -19,6 +19,6 @@ export class RemindersController {
   @Post('send-all')
   @Roles('ADMIN', 'FINANCE_SECRETARY')
   sendAll(@CurrentUser() user: AuthUser) {
-    return this.reminders.sendAllForEstate(user.estateId);
+    return this.reminders.sendManualSweep(user.estateId);
   }
 }
