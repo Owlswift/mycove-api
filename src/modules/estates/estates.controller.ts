@@ -1,5 +1,11 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
 import { EstatesService } from './estates.service';
+import { UpdateEmergencyContactsDto } from './dto/update-emergency-contacts.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthUser } from '../../common/decorators/current-user.decorator';
 
 /**
  * Deliberately unauthenticated — the mobile app calls this on its very
@@ -14,5 +20,43 @@ export class EstatesController {
   @Get(':code')
   findByCode(@Param('code') code: string) {
     return this.estates.findByCode(code);
+  }
+}
+
+/**
+ * Authenticated sibling of [EstatesController] — serves the logged-in
+ * resident app's SOS screen. Kept as a separate class so the public
+ * estate-code lookup above stays guard-free exactly as before.
+ *
+ * NOTE: this route must stay registered BEFORE any `:code`-style param
+ * route conflict matters — Nest matches by registration order per
+ * controller path, and 'estates/emergency-contacts' would otherwise be
+ * captured by findByCode('emergency-contacts') if they shared a class.
+ */
+@Controller('estates/emergency-contacts')
+@UseGuards(JwtAuthGuard)
+export class EstateEmergencyContactsController {
+  constructor(private estates: EstatesService) {}
+
+  @Get()
+  get(@CurrentUser() user: AuthUser) {
+    return this.estates.getEmergencyContacts(user.estateId);
+  }
+}
+
+@Controller('estates/admin/emergency-contacts')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
+export class AdminEstateEmergencyContactsController {
+  constructor(private estates: EstatesService) {}
+
+  @Get()
+  get(@CurrentUser() user: AuthUser) {
+    return this.estates.getEmergencyContacts(user.estateId);
+  }
+
+  @Patch()
+  update(@CurrentUser() user: AuthUser, @Body() dto: UpdateEmergencyContactsDto) {
+    return this.estates.updateEmergencyContacts(user.estateId, dto);
   }
 }

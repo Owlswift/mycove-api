@@ -14,111 +14,206 @@ outcome with distinguishing **properties** (never one event per variant —
 | Admin | Next.js dashboard | `lib/analytics.ts` | `NEXT_PUBLIC_MIXPANEL_TOKEN` env |
 
 **Identity:** identified by userId on login/bootstrap; super properties
-`estate_id`, `estate_name`, `role`, `platform`; identity reset on logout.
+`estate_id`, `estate_name`, `role`, `platform`, `environment`; identity reset
+on logout.
+
+**People profiles (backend):** backend events attributed to a real user
+(`payment_initiated`, `payment_success`, `payment_failed`,
+`wallet_transaction`) go through `AnalyticsService.trackUser`, which also
+upserts that user's Mixpanel people profile — `$name`/`full_name`,
+`$phone`/`phone`, `estate_id`, `estate_name` (their estate) — pulled fresh
+from the database on every event, so each person object always carries their
+fullname, phone number, and the estate they belong to. Never use plain
+`track` for user identities on the backend.
+
+**Global properties (auto-attached to every event):**
+
+| Property | Source |
+|---|---|
+| `user_id` | Flutter identify / backend distinct_id |
+| `estate_id` | Flutter identify / backend event prop |
+| `user_role` | Flutter identify |
+| `session_id` | Flutter session UUID |
+| `platform` | Flutter device info |
+| `app_version` | Flutter package info |
+| `os_version` | Flutter device info |
+| `device_model` | Flutter device info |
+| `environment` | Flutter `FLUTTER_ENV` / backend `NODE_ENV` / admin `NODE_ENV` |
+| `request_id` | Backend only |
+| `service` | Backend only (`communityhub-api`) |
+| `admin_id` | Admin only |
+| `admin_role` | Admin only |
 
 **Privacy guardrails (enforced in wrappers):**
 - Voice transcripts truncated to 120 chars; digit-runs ≥ 7 chars (meter/phone numbers) redacted
 - Never sent as properties: passwords, PINs, tokens, full phone numbers, meter numbers
+- Full voice transcripts stay in the backend database — Mixpanel only gets analytical summaries
 
 ---
 
-## Lifecycle (mobile)
+## Authentication (mobile)
 
 | Event | Trigger | Properties |
 |---|---|---|
-| `app_opened` | App cold start | platform |
-| `app_foregrounded` / `app_backgrounded` | Lifecycle change | — |
+| `signup_started` | Signup form opened | signup_method, platform |
+| `signup_completed` | Signup succeeded | signup_method, referral_source, duration_ms |
+| `login_success` | Login succeeded | login_method, duration_ms |
+| `login_failed` | Login rejected | login_method, failure_reason, attempt_number |
+| `otp_requested` | Forgot-password OTP sent | otp_type, channel |
+| `otp_verified` | OTP accepted | otp_type, channel, attempt_number, duration_ms |
 
-## Auth & onboarding (mobile)
-
-| Event | Trigger | Properties |
-|---|---|---|
-| `estate_code_submitted` | Estate code lookup attempted | success, error |
-| `estate_confirmed` | "Continue to Login" on estate-found screen | estate_id, estate_name |
-| `login_started` | Login submit tapped | role |
-| `login_success` | Login succeeded | role |
-| `login_failed` | Login rejected | role, error |
-| `otp_requested` | Forgot-password OTP sent | success |
-| `otp_verified` | OTP accepted | success |
-| `password_reset_completed` | New password saved | — |
-| `force_reset_completed` | First-login setup finished | role |
-| `logout` | Logout tapped | — |
-| `biometric_enabled` / `biometric_disabled` | Profile toggle | success |
-| `app_unlocked` | Lock screen passed | method (biometric/pin), success |
-
-## Dues & levies (mobile)
+## App usage (mobile)
 
 | Event | Trigger | Properties |
 |---|---|---|
-| `dues_payment_started` | Pay dues tapped | amount |
-| `dues_payment_success` / `dues_payment_failed` | Verify loop resolved | amount, reference |
-| `levy_payment_success` | Levy paid | levy_label, amount |
-
-## Electricity & airtime (mobile)
-
-| Event | Trigger | Properties |
-|---|---|---|
-| `electricity_flow_started` | Wizard opened | entry_point (manual/voice) |
-| `meter_verified` | DISCO verification returned | disco_code, meter_type, success |
-| `meter_added` | Meter saved to account | disco_code |
-| `electricity_purchase_started` | Buy submitted | amount, disco_code |
-| `electricity_purchase_success` / `_failed` | Vend resolved | amount, disco_code, failure_reason |
-| `airtime_purchase_started` | Buy submitted | amount, network |
-| `airtime_purchase_success` / `_failed` | Vend resolved | amount, network, failure_reason |
+| `screen_viewed` | Route change | screen_name, previous_screen |
+| `feature_opened` | Feature opened | feature, entry_point |
+| `search_performed` | Search executed | search_type, result_count |
 
 ## Voice assistant (mobile)
 
 | Event | Trigger | Properties |
 |---|---|---|
-| `voice_assistant_opened` | Mic overlay opened | — |
-| `voice_listening_started` | STT session began | awaiting_meter_number |
-| `voice_transcript_received` | Final transcript | transcript (redacted/truncated) |
-| `voice_intent_detected` | Parser matched | intent, matched_rule, params, latency_ms |
-| `voice_intent_unrecognized` | Parser returned null | transcript (redacted) |
-| `voice_command_executed` | Intent handler completed | intent, navigation_target |
-| `voice_command_failed` | Handler errored | intent, failure_reason |
-| `voice_confirmation_requested` / `_confirmed` / `_cancelled` | Purchase confirm flow | kind, amount |
-| `voice_tts_failed` | Speak threw | — |
+| `voice_assistant_opened` | Mic overlay opened | entry_point |
+| `voice_listening_started` | STT session began | voice_mode |
+| `voice_transcript_received` | Final transcript | transcript_length, stt_duration_ms, language |
+| `voice_intent_detected` | Parser matched | intent, parser_version, confidence, matched_rule |
+| `voice_intent_unrecognized` | Parser returned null | parser_version, transcript_length |
+| `voice_command_executed` | Intent handler completed | intent, success, duration_ms |
+| `voice_command_failed` | Handler errored | intent, failure_reason, duration_ms |
+| `voice_confirmation_requested` | Purchase confirm flow | intent |
+| `voice_confirmation_confirmed` | Confirm accepted | intent, confirmation_method |
+| `voice_confirmation_cancelled` | Confirm rejected | intent, cancel_reason |
+| `voice_response_completed` | TTS reply finished | intent, tts_voice, duration_ms, interrupted |
+| `voice_tts_failed` | Speak threw | tts_provider, tts_voice, failure_reason |
 
-## Visitors & gate (mobile)
-
-| Event | Trigger | Properties |
-|---|---|---|
-| `visitor_created` | Pass issued | valid_hours |
-| `visitor_cancelled` | Pass revoked | — |
-| `gate_access_granted` / `gate_access_denied` | Guard verify result | reason |
-| `entry_recorded` / `exit_recorded` | Guard logged movement | — |
-
-## Meetings & engagement (mobile)
+## Electricity (mobile)
 
 | Event | Trigger | Properties |
 |---|---|---|
-| `meeting_report_played` / `_paused` / `_stopped` | Report TTS controls | meeting_id, report_length |
-| `meeting_added_to_calendar` | Calendar button | meeting_id |
-| `poll_voted` | Vote cast | poll_id |
-| `complaint_submitted` | Complaint filed | category, ref |
-| `pledge_made` | Pledge committed | project_id, amount |
-| `announcement_read` | Announcement opened | announcement_id, category |
-| `notification_opened` | Push tap → refresh | type |
+| `electricity_purchase_started` | Buy submitted | disco, amount, meter_type, payment_method, entry_point |
+| `electricity_purchase_confirmed` | Confirm details | disco, amount, payment_method |
+| `electricity_purchase_success` | Vend resolved | disco, amount, payment_method, duration_ms |
+| `electricity_purchase_failed` | Vend failed | disco, amount, payment_method, failure_reason, provider, duration_ms |
+| `electricity_token_received` | Token delivered | disco, amount, token_delivery_method, duration_ms |
+
+## Airtime (mobile)
+
+| Event | Trigger | Properties |
+|---|---|---|
+| `airtime_purchase_started` | Buy submitted | network, amount, payment_method, entry_point |
+| `airtime_purchase_success` | Vend resolved | network, amount, payment_method, duration_ms |
+| `airtime_purchase_failed` | Vend failed | network, amount, payment_method, failure_reason, provider, duration_ms |
+
+## Dues / levies (mobile)
+
+| Event | Trigger | Properties |
+|---|---|---|
+| `dues_balance_viewed` | Dues screen opened | balance_status |
+| `dues_payment_started` | Pay dues tapped | amount, payment_method, payment_type |
+| `dues_payment_success` | Payment resolved | amount, payment_method, payment_type, duration_ms |
+| `dues_payment_failed` | Payment failed | amount, payment_method, payment_type, failure_reason |
+
+Where `payment_type = monthly_dues | levy`.
+
+## Visitors (mobile)
+
+| Event | Trigger | Properties |
+|---|---|---|
+| `visitor_created` | Pass issued | visitor_type, pass_duration, entry_method |
+| `visitor_updated` | Pass edited | fields_changed |
+| `visitor_cancelled` | Pass revoked | reason, time_before_visit |
+| `visitor_pass_shared` | Pass shared | share_method |
+| `visitor_arrived` | Entry recorded | entry_method |
+| `visitor_exited` | Exit recorded | duration_minutes |
+
+## Meetings (mobile)
+
+| Event | Trigger | Properties |
+|---|---|---|
+| `meeting_viewed` | Meeting detail opened | meeting_type, meeting_status |
+| `meeting_report_viewed` | Report viewed | meeting_date |
+| `meeting_decisions_viewed` | Decisions viewed | meeting_date, decision_count |
+| `meeting_action_items_viewed` | Action items viewed | meeting_date, action_item_count |
+
+## Announcements (mobile)
+
+| Event | Trigger | Properties |
+|---|---|---|
+| `announcement_viewed` | Announcement opened | announcement_type, announcement_age_days |
+| `announcement_read` | Marked read | time_to_read_ms |
+| `announcement_attachment_opened` | Attachment opened | attachment_type |
+
+## Notifications (mobile)
+
+| Event | Trigger | Properties |
+|---|---|---|
+| `push_notification_received` | Push delivered | notification_type, campaign_id |
+| `push_notification_opened` | Push tapped | notification_type, campaign_id, time_since_received_ms |
+| `notification_permission_granted` | Permission granted | permission_source |
 
 ---
 
-## Backend business events (server-side = authoritative)
+## Admin — residents
 
 | Event | Trigger | Properties |
 |---|---|---|
-| `payment_initiated` | Paystack init | purpose, amount, user_id, estate_id |
-| `payment_success` / `payment_failed` | Verify/webhook resolved | purpose, amount, reference |
-| `vending_request_created` | Utility purchase row created | type, amount, request_id |
-| `vending_provider_called` | VTpass/BuyPower call | provider, type, attempt |
-| `vending_success` / `vending_failed` / `vending_timeout` | Provider resolved | provider, type, amount, duration_ms, failure_reason |
-| `token_generated` | Electricity token issued | disco_code, units |
-| `wallet_transaction` | Ledger entry written | type, amount, balance_after |
-| `account_created` / `account_revoked` | User lifecycle | role, estate_id |
-| `meeting_reminders_sent` | Scheduler fired kinds for a meeting | kinds |
-| `payment_reminder_cron_ran` | Daily sweep per estate | dues, levies, pledges counts |
-| `payment_reminders_sent_manual` | Admin button sweep | same counts |
-| `notification_failed` | FCM multicast partial failure | failure_count |
+| `resident_profile_viewed` | Profile opened | source |
+| `resident_created` | User created | registration_method |
+| `resident_updated` | User edited | fields_changed |
+| `resident_suspended` | User suspended | reason |
+| `resident_activated` | User activated | reason |
+
+## Admin — meetings
+
+| Event | Trigger | Properties |
+|---|---|---|
+| `meeting_created` | Meeting created | meeting_type, scheduled_date |
+| `meeting_updated` | Meeting edited | fields_changed |
+| `meeting_report_created` | Report submitted | meeting_date, word_count |
+| `meeting_decision_added` | Decision added | meeting_date |
+| `action_item_created` | Action item added | meeting_date, has_assignee, has_due_date |
+
+## Admin — announcements
+
+| Event | Trigger | Properties |
+|---|---|---|
+| `announcement_created` | Announcement created | announcement_type, audience, has_attachment |
+| `announcement_published` | Announcement published | announcement_type, audience, recipient_count |
+| `announcement_deleted` | Announcement deleted | announcement_age_days |
+
+---
+
+## Backend payment events
+
+| Event | Trigger | Properties |
+|---|---|---|
+| `payment_initiated` | Paystack init | payment_type, amount, provider, payment_method |
+| `payment_success` | Verify/webhook resolved | payment_type, amount, provider, duration_ms |
+| `payment_failed` | Verify/webhook failed | payment_type, amount, provider, failure_reason, duration_ms |
+| `payment_webhook_received` | Webhook received | provider, payment_type, processing_duration_ms |
+| `payment_webhook_failed` | Webhook failed | provider, failure_reason, retry_count |
+
+## Backend utility vending
+
+| Event | Trigger | Properties |
+|---|---|---|
+| `vending_request_created` | Utility purchase row created | utility_type, provider, amount |
+| `vending_success` | Provider resolved | utility_type, provider, amount, duration_ms |
+| `vending_failed` | Provider rejected | utility_type, provider, amount, failure_reason, duration_ms |
+| `vending_timeout` | Provider timed out | utility_type, provider, timeout_ms |
+
+## Reliability
+
+| Event | Trigger | Properties |
+|---|---|---|
+| `api_request_failed` | API error | endpoint, http_status, error_type, duration_ms |
+| `api_timeout` | API timeout | endpoint, timeout_ms |
+| `websocket_connected` | WS connected | connection_type, duration_since_app_open_ms |
+| `websocket_disconnected` | WS disconnected | disconnect_reason, connection_duration_ms |
+| `websocket_reconnected` | WS reconnected | attempt_number, downtime_ms |
+
+---
 
 ## Admin dashboard events
 

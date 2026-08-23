@@ -43,11 +43,12 @@ export class PaymentsService {
         amount: dto.amount,
       },
     });
-    this.analytics.track('payment_initiated', userId, {
-      purpose: dto.purpose,
+    this.analytics.trackUser('payment_initiated', userId, {
+      payment_type: dto.purpose,
       amount: dto.amount,
+      provider: 'paystack',
+      payment_method: 'card',
       estate_id: estateId,
-      reference,
     });
 
     const { authorizationUrl } = await this.gateway.initialize({
@@ -97,14 +98,15 @@ export class PaymentsService {
       }
     });
 
-    this.analytics.track(
+    this.analytics.trackUser(
       nextStatus === 'SUCCESS' ? 'payment_success' : 'payment_failed',
       userId,
       {
-        purpose: payment.purpose,
+        payment_type: payment.purpose,
         amount: payment.amount,
+        provider: 'paystack',
         estate_id: payment.estateId,
-        reference,
+        duration_ms: 0,
       },
     );
 

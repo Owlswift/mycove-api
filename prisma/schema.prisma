@@ -25,6 +25,13 @@ model Estate {
   name        String
   address     String?
   managedBy   String?
+  /// Security-desk duty phone shown on every resident's SOS screen —
+  /// managed by the estate admin (see EstatesController admin endpoints),
+  /// since no GUARD account owns a number residents should dial directly.
+  securityGuardPhone String?
+  /// Management-office phone shown alongside the security desk number on
+  /// the SOS screen — same admin-managed lifecycle as securityGuardPhone.
+  estateAdminPhone   String?
   imageBase64 String?
   createdAt   DateTime @default(now())
 

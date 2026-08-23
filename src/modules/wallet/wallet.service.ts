@@ -69,7 +69,7 @@ export class WalletService {
           utilityPurchaseId: params.utilityPurchaseId,
         },
       }).then((tx2) => {
-        this.analytics.track('wallet_transaction', params.userId, {
+        this.analytics.trackUser('wallet_transaction', params.userId, {
           type: tx2.type,
           amount: tx2.amount,
           balance_after: tx2.balanceAfter,
