@@ -165,7 +165,7 @@ export class MeetingReminderService {
         recipients: userIds.length,
       });
       await this.push.sendToUsers(userIds, {
-        title: 'CommunityHub',
+        title: 'MyCove',
         body: message,
         data: { type: 'meeting' },
       });

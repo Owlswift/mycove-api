@@ -6,7 +6,7 @@ export class HealthController {
   check() {
     return {
       status: 'ok',
-      service: 'communityhub-api',
+      service: 'mycove-api',
       timestamp: new Date().toISOString(),
     };
   }

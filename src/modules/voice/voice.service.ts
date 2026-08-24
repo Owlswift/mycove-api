@@ -70,7 +70,7 @@ export class VoiceService {
     const balance = await this.wallet.getBalance(userId, estateId);
     return {
       ok: true,
-      speech: `Your CommunityHub balance is ${formatNaira(balance)}.`,
+      speech: `Your MyCove balance is ${formatNaira(balance)}.`,
       data: { balance },
     };
   }
@@ -131,7 +131,7 @@ export class VoiceService {
     if (balance < dto.amount) {
       return {
         ok: false,
-        speech: `Your CommunityHub balance is ${formatNaira(balance)}, which isn't enough for ${formatNaira(dto.amount)} of electricity.`,
+        speech: `Your MyCove balance is ${formatNaira(balance)}, which isn't enough for ${formatNaira(dto.amount)} of electricity.`,
       };
     }
 
@@ -178,7 +178,7 @@ export class VoiceService {
     if (balance < dto.amount) {
       return {
         ok: false,
-        speech: `Your CommunityHub balance is ${formatNaira(balance)}, which isn't enough for ${formatNaira(dto.amount)} of airtime.`,
+        speech: `Your MyCove balance is ${formatNaira(balance)}, which isn't enough for ${formatNaira(dto.amount)} of airtime.`,
       };
     }
 

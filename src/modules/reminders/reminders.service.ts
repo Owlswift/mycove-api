@@ -184,7 +184,7 @@ export class RemindersService {
       data: { userId, estateId, title: message, type },
     });
     await this.push.sendToUser(userId, {
-      title: 'CommunityHub',
+      title: 'MyCove',
       body: message,
       data: { type },
     });

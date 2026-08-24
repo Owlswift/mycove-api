@@ -1,4 +1,4 @@
-# CommunityHub Analytics Event Dictionary
+# MyCove Analytics Event Dictionary
 
 Single source of truth for every Mixpanel event across the three surfaces.
 Every event follows `area_object_outcome` snake_case naming; one event per
@@ -40,7 +40,7 @@ fullname, phone number, and the estate they belong to. Never use plain
 | `device_model` | Flutter device info |
 | `environment` | Flutter `FLUTTER_ENV` / backend `NODE_ENV` / admin `NODE_ENV` |
 | `request_id` | Backend only |
-| `service` | Backend only (`communityhub-api`) |
+| `service` | Backend only (`mycove-api`) |
 | `admin_id` | Admin only |
 | `admin_role` | Admin only |
 
@@ -69,6 +69,7 @@ fullname, phone number, and the estate they belong to. Never use plain
 | `screen_viewed` | Route change | screen_name, previous_screen |
 | `feature_opened` | Feature opened | feature, entry_point |
 | `search_performed` | Search executed | search_type, result_count |
+| `emergency_contact_updated` | Emergency contact saved/removed from profile | action (set/update/remove) |
 
 ## Voice assistant (mobile)
 

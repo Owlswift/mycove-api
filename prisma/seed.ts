@@ -9,8 +9,8 @@ const connectionString = process.env.DATABASE_URL;
 const adapter = new PrismaPg(connectionString!);
 const prisma = new PrismaClient({ adapter });
 
-// Seed data transcribed 1:1 from the CommunityHub Flutter app's
-// lib/data/mock_data.dart, which itself mirrors the original CommunityHub.dc.html
+// Seed data transcribed 1:1 from the MyCove Flutter app's
+// lib/data/mock_data.dart, which itself mirrors the original MyCove.dc.html
 // design mockup.
 async function main() {
   const estate = await prisma.estate.upsert({

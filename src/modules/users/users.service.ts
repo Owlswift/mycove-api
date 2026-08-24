@@ -43,10 +43,11 @@ export class UsersService {
   /**
    * Self-service profile updates — the resident-facing path for adding or
    * changing an emergency contact (and email) at any time, not just during
-   * first-login setup. Household-invited members in particular never saw
-   * the profile-completion step (their profile was "already complete" per
-   * HouseholdService.approveInvite), so this is their only way to add one
-   * after onboarding.
+   * first-login setup. Household-invited members skip the full profile
+   * form in onboarding (their profile was "already complete" per
+   * HouseholdService.approveInvite), but they do walk through the
+   * emergency-contact step of the force-reset wizard like everyone else;
+   * this endpoint is still their (and everyone's) way to change it later.
    *
    * Deliberately excludes identity fields (phone, fullName, house, role,
    * duesLiable) — those are estate-managed data; letting a self-serve

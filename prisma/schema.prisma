@@ -142,7 +142,7 @@ enum HouseholdInviteStatus {
 }
 
 /// A resident inviting another person to become their own, fully
-/// independent CommunityHub account — not a sub-user, not a shared login —
+/// independent MyCove account — not a sub-user, not a shared login —
 /// while exempting that person from a second, duplicate dues/levy
 /// obligation (see User.duesLiable). No SMS/OTP involved (real cost, and
 /// this app has no SMS provider anyway): the moment an admin approves the

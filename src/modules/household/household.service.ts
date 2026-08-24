@@ -17,7 +17,7 @@ function generateAccessCode(): string {
 
 /**
  * A resident inviting another person (e.g. a spouse) to get their own,
- * fully independent CommunityHub account without that person accruing a
+ * fully independent MyCove account without that person accruing a
  * second, duplicate dues/levy obligation for the same household — see
  * User.duesLiable and HouseholdInvite in schema.prisma for the full
  * rationale.
@@ -173,8 +173,9 @@ export class HouseholdService {
           // Same household, same address — the inviter already gave the
           // estate this information, so there's nothing new for the
           // invitee to provide here (see AuthService.completeForceReset
-          // and ForceResetPage, which skip the profile-completion step
-          // entirely for household-invited accounts as a result).
+          // and ForceResetPage, which skip the full profile form for
+          // household-invited accounts but still show them the
+          // emergency-contact step of the onboarding wizard).
           house: invite.invitedBy.house,
           passwordHash,
           role: 'RESIDENT',

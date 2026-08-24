@@ -53,7 +53,7 @@ export class AnalyticsService {
     return {
       ...properties,
       request_id: requestId ?? 'unknown',
-      service: 'communityhub-api',
+      service: 'mycove-api',
       environment: process.env.NODE_ENV ?? 'development',
     };
   }

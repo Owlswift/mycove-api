@@ -29,6 +29,6 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
   await app.listen(port, '0.0.0.0');
-  logger.log(`CommunityHub API running on http://0.0.0.0:${port}`);
+  logger.log(`MyCove API running on http://0.0.0.0:${port}`);
 }
 void bootstrap();
