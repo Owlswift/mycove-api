@@ -102,6 +102,14 @@ export class ProjectsService {
       where: { id: projectId, estateId },
     });
     if (!project) throw new NotFoundException('Project not found');
+    // Completed projects take no new pledges — the UI hides the button, but
+    // the API enforces it too so a stale client or direct call can't sneak one
+    // in. Existing unfulfilled pledges stay visible as outstanding regardless.
+    if (project.status === 'COMPLETED') {
+      throw new ConflictException(
+        'This project is already completed — pledges are closed.',
+      );
+    }
 
     await this.prisma.projectPledge.create({
       data: { projectId, userId, amount: dto.amount, estateId: project.estateId },

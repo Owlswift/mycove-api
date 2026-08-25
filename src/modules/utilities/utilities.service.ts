@@ -57,6 +57,23 @@ type PendingOutcome = { pending: true };
 type SucceededOutcome<T> = { succeeded: true; providerName: string; result: T };
 type Outcome<T> = SucceededOutcome<T> | PendingOutcome | FailedOutcome;
 
+/**
+ * Meter details ride along on every purchase response (list + buy) so the
+ * app's receipts can show exactly which meter/DISCO a token belongs to
+ * without a second lookup. Airtime purchases have no meter — the include
+ * simply yields `meter: null` there.
+ */
+const PURCHASE_WITH_METER = {
+  meter: {
+    select: {
+      meterNumber: true,
+      discoName: true,
+      discoCode: true,
+      meterType: true,
+    },
+  },
+} as const;
+
 // https://vtpass.com/documentation/transaction-update-webhook-api/ — sent
 // when a transaction that came back 099 ("still processing") on the
 // original /pay call later resolves. `purchased_code` is documented as the
@@ -312,9 +329,12 @@ export class UtilitiesService {
   }
 
   listPurchases(userId: string, estateId: string) {
+    // Meter details ride along so receipts can show exactly which
+    // meter/DISCO a token belongs to without a second round trip.
     return this.prisma.utilityPurchase.findMany({
       where: { userId, estateId },
       orderBy: { createdAt: 'desc' },
+      include: PURCHASE_WITH_METER,
     });
   }
 
@@ -432,6 +452,7 @@ export class UtilitiesService {
       return this.prisma.utilityPurchase.update({
         where: { id: purchaseId },
         data: { status: 'PENDING' },
+        include: PURCHASE_WITH_METER,
       });
     }
     if ('failed' in outcome) {
@@ -463,6 +484,7 @@ export class UtilitiesService {
         units: electricityResult?.units ?? null,
         tariff: electricityResult?.tariff ?? null,
       },
+      include: PURCHASE_WITH_METER,
     });
   }
 }
