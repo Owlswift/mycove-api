@@ -6,7 +6,7 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // The admin web app (communityhub-admin) is a separate origin hitting
+  // The admin web app (mycove-admin) is a separate origin hitting
   // this same API — reflect the request origin rather than hardcoding a
   // port, since local dev tooling picks whatever port is free.
   app.enableCors({ origin: true, credentials: true });

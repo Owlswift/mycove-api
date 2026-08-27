@@ -3,9 +3,9 @@
 > NestJS 11 · Prisma 7 · PostgreSQL · service name `mycove-api`
 >
 > Feature inventory: [FEATURES.md](FEATURES.md) · Mobile app:
-> [`../../communityhub/docs/ARCHITECTURE.md`](../../communityhub/docs/ARCHITECTURE.md)
+> [`../../mycove/docs/ARCHITECTURE.md`](../../mycove/docs/ARCHITECTURE.md)
 > · Admin:
-> [`../../communityhub-admin/docs/ARCHITECTURE.md`](../../communityhub-admin/docs/ARCHITECTURE.md)
+> [`../../mycove-admin/docs/ARCHITECTURE.md`](../../mycove-admin/docs/ARCHITECTURE.md)
 
 ## 1. System context
 
@@ -86,7 +86,7 @@ a stub without touching call sites:
 
 | Third party | Used for | Integration point | Configuration |
 |---|---|---|---|
-| **PostgreSQL** | Primary datastore | Prisma 7 with `@prisma/adapter-pg`, global `PrismaModule`; docker-compose exposes localhost:5433 (`POSTGRES_DB: communityhub` — name intentionally unchanged) | `DATABASE_URL` |
+| **PostgreSQL** | Primary datastore | Prisma 7 with `@prisma/adapter-pg`, global `PrismaModule`; docker-compose exposes localhost:5433 (`POSTGRES_DB: mycove`) | `DATABASE_URL` |
 | **Firebase Admin SDK** | Push delivery (`getMessaging().sendEachForMulticast`) and nothing else — tokens are registered by the mobile apps against the same project (`mycove-7f39c`) | `src/modules/push/gateway/firebase-push.gateway.ts` | `FIREBASE_SERVICE_ACCOUNT_JSON` (full service-account JSON); absent ⇒ pushes disabled by design |
 | **Mixpanel** | Server-side product analytics ingest with common props (request id, environment, service name); never throws | `src/common/analytics/analytics.service.ts` | `MIXPANEL_TOKEN`; absent ⇒ disabled |
 | **VTpass** | Electricity + airtime vending (primary), transaction-status webhooks back to `POST /utilities/callback/vtpass` (unique request-id idempotency) | `src/modules/utilities/providers/vtpass.provider.ts` | `VTPASS_BASE_URL`, `VTPASS_API_KEY`, `VTPASS_PUBLIC_KEY`, `VTPASS_SECRET_KEY` |

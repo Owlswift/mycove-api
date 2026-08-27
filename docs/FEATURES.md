@@ -1,10 +1,10 @@
 # MyCove API — Feature Documentation
 
 > NestJS 11 + Prisma 7 (PostgreSQL) · global prefix `/api` · service name
-> `mycove-api` in health/analytics. Formerly **CommunityHub API**.
+> `mycove-api` in health/analytics. Formerly **MyCove API**.
 >
-> Sibling docs: [`MyCove mobile app`](../../communityhub/docs/FEATURES.md)
-> · [`MyCove admin dashboard`](../../communityhub-admin/docs/FEATURES.md)
+> Sibling docs: [`MyCove mobile app`](../../mycove/docs/FEATURES.md)
+> · [`MyCove admin dashboard`](../../mycove-admin/docs/FEATURES.md)
 
 Backend for the MyCove estate-management platform: resident app, guard app, and
 admin dashboard all talk to this. Roles enforced via `JwtAuthGuard` +

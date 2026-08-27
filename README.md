@@ -1,6 +1,6 @@
 # MyCove API
 
-Backend for the [MyCove](../communityhub) Flutter app — an estate
+Backend for the [MyCove](../mycove) Flutter app — an estate
 management system ("Palm Court Estate") with a resident role (dashboard,
 announcements, meetings, dues/payments, visitor passes, community projects,
 polls, notifications, rules, complaints) and a security guard role
