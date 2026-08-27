@@ -554,6 +554,17 @@ Secretary — Security Committee`;
     });
   }
 
+  const platformAdminPasswordHash = await argon2.hash('platform123');
+  await prisma.platformAdmin.upsert({
+    where: { email: 'super@mycove.ng' },
+    update: { passwordHash: platformAdminPasswordHash },
+    create: {
+      email: 'super@mycove.ng',
+      passwordHash: platformAdminPasswordHash,
+      fullName: 'Platform Super Admin',
+    },
+  });
+
   console.log('Seed complete.');
   console.log('  Resident login: 08035550142 / estate123');
   console.log('  Guard login:    08052229981 / guard123');
@@ -561,6 +572,7 @@ Secretary — Security Committee`;
   console.log('  Admin login:    08000000001 / admin123');
   console.log('  Finance Secretary login: 08000000002 / finance123');
   console.log('  Project Admin login:     08000000003 / project123');
+  console.log('  Platform Super Admin login: super@mycove.ng / platform123');
 }
 
 main()

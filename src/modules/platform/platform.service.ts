@@ -1,0 +1,97 @@
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import * as argon2 from 'argon2';
+import * as crypto from 'crypto';
+import { PrismaService } from '../../database/prisma.service';
+import { PlatformLoginDto } from './dto/platform-login.dto';
+import { CreateEstateDto } from './dto/create-estate.dto';
+import { CreateDiscoDto } from './dto/create-disco.dto';
+import { UpdateDiscoDto } from './dto/update-disco.dto';
+
+const ACCESS_TOKEN_TTL = '12h';
+
+@Injectable()
+export class PlatformService {
+  constructor(
+    private prisma: PrismaService,
+    private jwt: JwtService,
+  ) {}
+
+  async login(dto: PlatformLoginDto) {
+    const admin = await this.prisma.platformAdmin.findUnique({
+      where: { email: dto.email.toLowerCase() },
+    });
+    if (!admin) {
+      throw new UnauthorizedException('Incorrect email or password.');
+    }
+    const valid = await argon2.verify(admin.passwordHash, dto.password);
+    if (!valid) {
+      throw new UnauthorizedException('Incorrect email or password.');
+    }
+    if (!admin.active) {
+      throw new UnauthorizedException('This account has been deactivated.');
+    }
+
+    const jti = crypto.randomUUID();
+    const accessToken = await this.jwt.signAsync(
+      { sub: admin.id, jti, scope: 'PLATFORM' },
+      { secret: process.env.JWT_SECRET, expiresIn: ACCESS_TOKEN_TTL },
+    );
+
+    return {
+      accessToken,
+      admin: { id: admin.id, email: admin.email, fullName: admin.fullName },
+    };
+  }
+
+  // ── Estates ──────────────────────────────────────────────────────────
+  listEstates() {
+    return this.prisma.estate.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { users: true } } },
+    });
+  }
+
+  async createEstate(dto: CreateEstateDto) {
+    const existing = await this.prisma.estate.findUnique({
+      where: { code: dto.code },
+    });
+    if (existing) {
+      throw new ConflictException('An estate with this code already exists.');
+    }
+    return this.prisma.estate.create({ data: dto });
+  }
+
+  // ── DISCOs ───────────────────────────────────────────────────────────
+  // Not estate-scoped — see ElectricityDisco's schema doc comment. Includes
+  // inactive ones here (unlike the mobile-facing endpoint), since a
+  // platform admin needs to see and re-enable them, not just what's live.
+  listDiscos() {
+    return this.prisma.electricityDisco.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  async createDisco(dto: CreateDiscoDto) {
+    const existing = await this.prisma.electricityDisco.findUnique({
+      where: { code: dto.code },
+    });
+    if (existing) {
+      throw new ConflictException('A DISCO with this code already exists.');
+    }
+    return this.prisma.electricityDisco.create({ data: dto });
+  }
+
+  async updateDisco(id: string, dto: UpdateDiscoDto) {
+    const existing = await this.prisma.electricityDisco.findUnique({
+      where: { id },
+    });
+    if (!existing) throw new NotFoundException('DISCO not found.');
+    return this.prisma.electricityDisco.update({ where: { id }, data: dto });
+  }
+}

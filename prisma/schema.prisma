@@ -14,6 +14,22 @@ enum Role {
   PROJECT_ADMIN
 }
 
+/// Platform-level operator — not scoped to any estate, deliberately kept
+/// out of the User model rather than given a null-able estateId, since
+/// "belongs to no estate" is a different kind of account, not an edge
+/// case of a tenant-scoped one. Manages the mycove-super-admin app at
+/// admin.mycove.ng (estate admins live at myestate.mycove.ng instead) —
+/// e.g. the estate registry and global reference data like
+/// ElectricityDisco, which no single estate should own.
+model PlatformAdmin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
 /// A registry of estates. Every other model in this schema carries its own
 /// estateId — a flat, denormalized tenant column on every row rather than
 /// relying on join-through from a parent — so every query can filter with a

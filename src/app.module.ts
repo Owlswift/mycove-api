@@ -26,6 +26,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { HouseholdModule } from './modules/household/household.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
+import { PlatformModule } from './modules/platform/platform.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { RemindersModule } from './modules/reminders/reminders.module';
     HouseholdModule,
     // Daily 8am dues/levy/pledge reminder cron + admin "send reminders" endpoint.
     RemindersModule,
+    PlatformModule,
   ],
 })
 export class AppModule {}
