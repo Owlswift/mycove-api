@@ -28,6 +28,11 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 COPY --from=build /app/package*.json ./
+# prisma/seed.ts imports straight from src/ (e.g. normalize-phone) rather
+# than the compiled dist/ output, and runs via ts-node — so src/ has to
+# ship too, not just dist/, for `prisma db seed` to work in this image.
+COPY --from=build /app/src ./src
+COPY --from=build /app/tsconfig.json ./tsconfig.json
 
 EXPOSE 3000
 
