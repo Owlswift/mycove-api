@@ -11,6 +11,10 @@ export interface PaymentGateway {
   initialize(params: {
     reference: string;
     amount: number;
+    // Paystack's real /transaction/initialize requires an email — callers
+    // synthesize one from the resident's phone when they have no real
+    // email on file (see PaymentsService.initiate).
+    email: string;
   }): Promise<{ authorizationUrl: string }>;
   verify(reference: string): Promise<{ status: PaymentGatewayStatus }>;
 }

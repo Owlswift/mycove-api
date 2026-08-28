@@ -15,7 +15,7 @@ const SETTLE_DELAY_MS = 1400;
 export class MockPaystackGateway implements PaymentGateway {
   private readonly statuses = new Map<string, PaymentGatewayStatus>();
 
-  initialize(params: { reference: string; amount: number }) {
+  initialize(params: { reference: string; amount: number; email: string }) {
     this.statuses.set(params.reference, 'pending');
     setTimeout(
       () => this.statuses.set(params.reference, 'success'),

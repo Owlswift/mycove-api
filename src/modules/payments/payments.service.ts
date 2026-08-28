@@ -25,12 +25,17 @@ export class PaymentsService {
     if (dto.purpose === 'LEVY' && !dto.levyId) {
       throw new BadRequestException('levyId is required when purpose is LEVY');
     }
-    if (dto.purpose === 'DUES' || dto.purpose === 'LEVY') {
-      const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { duesLiable: true } });
-      if (!user.duesLiable) {
-        throw new BadRequestException('Dues and levies for this household are managed by the resident who invited you.');
-      }
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { duesLiable: true, email: true, phone: true },
+    });
+    if (!user.duesLiable) {
+      throw new BadRequestException('Dues and levies for this household are managed by the resident who invited you.');
     }
+    // Paystack requires an email to initialize a transaction; email is
+    // optional on User, so fall back to a synthesized address rather than
+    // forcing residents to set a real one before they can pay.
+    const email = user.email || `${user.phone}@mycove.ng`;
 
     const reference = `PSK-${Date.now()}-${crypto.randomInt(1000, 9999)}`;
     await this.prisma.payment.create({
@@ -54,21 +59,44 @@ export class PaymentsService {
     const { authorizationUrl } = await this.gateway.initialize({
       reference,
       amount: dto.amount,
+      email,
     });
     return { reference, authorizationUrl };
   }
 
   async verify(userId: string, reference: string) {
-    const payment = await this.findOwnPayment(userId, reference);
+    await this.findOwnPayment(userId, reference); // ownership check only
+    return this.confirmByReference(reference);
+  }
+
+  /**
+   * The actual confirm-and-settle logic — deliberately callable without a
+   * userId (looked up from the Payment row itself), so both the
+   * client-polled `verify()` above AND the Paystack webhook
+   * (PaymentsWebhookController) go through this one path. Idempotent: a
+   * payment that's already left PENDING is a no-op, so a retried webhook
+   * delivery or a webhook arriving after the client already polled success
+   * both land here safely.
+   */
+  async confirmByReference(reference: string) {
+    const payment = await this.prisma.payment.findUnique({ where: { reference } });
+    if (!payment) throw new NotFoundException('Payment not found');
     if (payment.status !== 'PENDING') {
       return { status: payment.status };
     }
+    const userId = payment.userId;
 
     const { status } = await this.gateway.verify(reference);
     if (status === 'pending') return { status: 'PENDING' };
 
     const nextStatus = status === 'success' ? 'SUCCESS' : 'FAILED';
     await this.prisma.$transaction(async (tx) => {
+      // Re-check inside the transaction — a concurrent call (webhook racing
+      // the client's own poll) could have already settled this between the
+      // read above and here.
+      const current = await tx.payment.findUnique({ where: { id: payment.id } });
+      if (!current || current.status !== 'PENDING') return;
+
       await tx.payment.update({
         where: { id: payment.id },
         data: { status: nextStatus },

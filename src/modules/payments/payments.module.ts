@@ -1,17 +1,27 @@
 import { Module } from '@nestjs/common';
 import { PaymentsController } from './payments.controller';
+import { PaymentsWebhookController } from './payments-webhook.controller';
 import { PaymentsService } from './payments.service';
 import { PAYMENT_GATEWAY } from './gateway/payment-gateway.interface';
 import { MockPaystackGateway } from './gateway/mock-paystack.gateway';
+import { PaystackGateway } from './gateway/paystack.gateway';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [NotificationsModule],
-  controllers: [PaymentsController],
+  controllers: [PaymentsController, PaymentsWebhookController],
   providers: [
     PaymentsService,
     MockPaystackGateway,
-    { provide: PAYMENT_GATEWAY, useClass: MockPaystackGateway },
+    PaystackGateway,
+    {
+      provide: PAYMENT_GATEWAY,
+      // Local dev without Paystack keys keeps working exactly as before —
+      // only swaps to the real gateway once PAYSTACK_SECRET_KEY is set.
+      useFactory: (real: PaystackGateway, mock: MockPaystackGateway) =>
+        real.configured ? real : mock,
+      inject: [PaystackGateway, MockPaystackGateway],
+    },
   ],
 })
 export class PaymentsModule {}
