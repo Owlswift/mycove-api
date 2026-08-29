@@ -968,3 +968,26 @@ model WalletTransaction {
   @@index([userId])
   @@index([walletId])
 }
+
+enum WebsiteLeadStatus {
+  NEW
+  CONTACTED
+  CLOSED
+}
+
+/// A "Request a Demo" / contact-form submission from the public marketing
+/// site (mycove-website) — not tied to any Estate, since the submitter
+/// isn't necessarily an existing customer yet. Read and actioned from the
+/// cross-estate platform dashboard (mycove-super-admin), not the
+/// per-estate admin app.
+model WebsiteLead {
+  id         String            @id @default(cuid())
+  name       String
+  email      String
+  estateName String?
+  message    String
+  status     WebsiteLeadStatus @default(NEW)
+  createdAt  DateTime          @default(now())
+
+  @@index([status])
+}

@@ -12,6 +12,8 @@ import { PlatformLoginDto } from './dto/platform-login.dto';
 import { CreateEstateDto } from './dto/create-estate.dto';
 import { CreateDiscoDto } from './dto/create-disco.dto';
 import { UpdateDiscoDto } from './dto/update-disco.dto';
+import { CreateWebsiteLeadDto } from './dto/create-website-lead.dto';
+import { UpdateWebsiteLeadDto } from './dto/update-website-lead.dto';
 
 const ACCESS_TOKEN_TTL = '12h';
 
@@ -93,5 +95,26 @@ export class PlatformService {
     });
     if (!existing) throw new NotFoundException('DISCO not found.');
     return this.prisma.electricityDisco.update({ where: { id }, data: dto });
+  }
+
+  // ── Website leads (contact form / "Request a Demo") ─────────────────────
+  // createLead is called from the public marketing site with no auth — it's
+  // a prospect submitting an inquiry, not an existing platform admin.
+  createLead(dto: CreateWebsiteLeadDto) {
+    return this.prisma.websiteLead.create({ data: dto });
+  }
+
+  listLeads() {
+    return this.prisma.websiteLead.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async updateLead(id: string, dto: UpdateWebsiteLeadDto) {
+    const existing = await this.prisma.websiteLead.findUnique({
+      where: { id },
+    });
+    if (!existing) throw new NotFoundException('Lead not found.');
+    return this.prisma.websiteLead.update({ where: { id }, data: dto });
   }
 }

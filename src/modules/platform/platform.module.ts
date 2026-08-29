@@ -3,6 +3,8 @@ import {
   PlatformAuthController,
   PlatformEstatesController,
   PlatformDiscosController,
+  PlatformLeadsController,
+  PlatformLeadsPublicController,
 } from './platform.controller';
 import { PlatformService } from './platform.service';
 import { PlatformAuthGuard } from './platform-auth.guard';
@@ -12,6 +14,8 @@ import { PlatformAuthGuard } from './platform-auth.guard';
     PlatformAuthController,
     PlatformEstatesController,
     PlatformDiscosController,
+    PlatformLeadsPublicController,
+    PlatformLeadsController,
   ],
   providers: [PlatformService, PlatformAuthGuard],
 })
