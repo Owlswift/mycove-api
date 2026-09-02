@@ -27,18 +27,16 @@ async function bootstrap() {
     }),
   );
 
-  // Verbose request/response logging for mutating requests only (POST/PUT
-  // — the actions that actually change something) — GETs are excluded on
-  // purpose, they're too frequent (the resident/guard bootstrap alone
-  // fires ~17 of them) to be useful noise here. Logs what action was
-  // called (method + path + request body) and what the response was
-  // (status + body), success or failure, so a client-reported "something
-  // went wrong" can be traced to the real cause here instead of guessed at.
+  // Verbose request/response logging: POST/PUT always log (the actions
+  // that actually change something), success or failure. GET/DELETE/PATCH
+  // are otherwise silent — too frequent (the resident/guard bootstrap
+  // alone fires ~17 GETs) to be useful noise — EXCEPT when they fail
+  // (status >= 400), which always logs regardless of method, since a
+  // failing read is exactly the kind of thing a client-reported
+  // "something went wrong" turns out to be and must not go invisible.
   // Placed after json() so req.body is already parsed by the time it runs.
   const httpLogger = new Logger('HTTP');
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.method !== 'POST' && req.method !== 'PUT') return next();
-
     const start = Date.now();
     const { method, originalUrl } = req;
     const chunks: Buffer[] = [];
@@ -53,6 +51,8 @@ async function bootstrap() {
       return (originalEnd as (...a: unknown[]) => Response)(chunk, ...args);
     }) as typeof res.end;
     res.on('finish', () => {
+      const isMutating = method === 'POST' || method === 'PUT';
+      if (!isMutating && res.statusCode < 400) return;
       const ms = Date.now() - start;
       let body = Buffer.concat(chunks).toString('utf8');
       if (body.length > 2000) body = body.slice(0, 2000) + '…';

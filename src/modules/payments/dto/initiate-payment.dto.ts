@@ -5,10 +5,14 @@ export class InitiatePaymentDto {
   @IsPositive()
   amount!: number;
 
-  @IsIn(['DUES', 'LEVY'])
-  purpose!: 'DUES' | 'LEVY';
+  @IsIn(['DUES', 'LEVY', 'WALLET_TOPUP'])
+  purpose!: 'DUES' | 'LEVY' | 'WALLET_TOPUP';
 
   @IsOptional()
   @IsString()
   levyId?: string;
+
+  @IsOptional()
+  @IsIn(['PAYSTACK', 'WALLET'])
+  method?: 'PAYSTACK' | 'WALLET';
 }

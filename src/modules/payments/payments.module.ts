@@ -6,9 +6,10 @@ import { PAYMENT_GATEWAY } from './gateway/payment-gateway.interface';
 import { MockPaystackGateway } from './gateway/mock-paystack.gateway';
 import { PaystackGateway } from './gateway/paystack.gateway';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
-  imports: [NotificationsModule],
+  imports: [NotificationsModule, WalletModule],
   controllers: [PaymentsController, PaymentsWebhookController],
   providers: [
     PaymentsService,

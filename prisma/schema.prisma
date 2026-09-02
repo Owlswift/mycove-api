@@ -475,12 +475,18 @@ model LevyPayment {
 enum PaymentPurpose {
   DUES
   LEVY
+  WALLET_TOPUP
 }
 
 enum PaymentStatus {
   PENDING
   SUCCESS
   FAILED
+}
+
+enum PaymentMethod {
+  PAYSTACK
+  WALLET
 }
 
 model Payment {
@@ -492,6 +498,7 @@ model Payment {
   levyId    String?
   amount    Int
   status    PaymentStatus  @default(PENDING)
+  method    PaymentMethod  @default(PAYSTACK)
   createdAt DateTime       @default(now())
 
   estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)

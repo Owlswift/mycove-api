@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { SpotlightsService } from './spotlights.service';
 import { CreateSpotlightDto } from './dto/create-spotlight.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -14,8 +15,17 @@ export class SpotlightsController {
 
   @Get('current')
   @Roles('RESIDENT')
-  current(@CurrentUser() user: AuthUser) {
-    return this.spotlights.current(user.estateId);
+  async current(@CurrentUser() user: AuthUser, @Res() res: Response) {
+    const result = await this.spotlights.current(user.estateId);
+    // Nest's default handler sends a genuinely empty body (no
+    // Content-Type at all) for a bare `null`/`undefined` return value —
+    // most estates have no active spotlight, so this was the common case,
+    // not an edge case. Dio then hands the client a String ('') instead
+    // of null for that body, and `currentSpotlight()`'s `as Map<String,
+    // dynamic>?` cast throws — crashing the entire post-login resident
+    // bootstrap for any such estate. Sending an explicit JSON `null`
+    // (still a `Map<String, dynamic>?`-shaped contract) avoids that.
+    res.status(200).json(result ?? null);
   }
 
   @Get()
