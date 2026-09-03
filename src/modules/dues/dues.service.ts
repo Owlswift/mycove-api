@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /** Used only if Finance Secretary hasn't set a rate yet (see DuesSettings). */
 export const DEFAULT_MONTHLY_DUES_AMOUNT = 45000;
@@ -65,7 +66,10 @@ export function computeDuesAccrual(
 
 @Injectable()
 export class DuesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   /** The current monthly dues rate, as set by Finance Secretary — falls back to the default if never configured. */
   async getMonthlyDuesAmount(estateId: string): Promise<number> {
@@ -257,8 +261,10 @@ export class DuesService {
     return { message: 'Levy paid.' };
   }
 
-  createLevy(estateId: string, data: { label: string; amount: number; dueDate: string; year: number }) {
-    return this.prisma.levy.create({ data: { ...data, estateId } });
+  async createLevy(estateId: string, data: { label: string; amount: number; dueDate: string; year: number }) {
+    const levy = await this.prisma.levy.create({ data: { ...data, estateId } });
+    await this.notifications.notifyNewLevy(estateId, levy.label);
+    return levy;
   }
 
   async deleteLevy(estateId: string, id: string) {

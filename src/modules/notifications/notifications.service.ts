@@ -54,6 +54,16 @@ export class NotificationsService {
     await this.notifyAllResidents(estateId, `Project update: ${title}`, 'project');
   }
 
+  /** Notifies every resident (in-app + push) that a new poll is open for voting. */
+  async notifyNewPoll(estateId: string, question: string) {
+    await this.notifyAllResidents(estateId, `New poll: ${question}`, 'poll');
+  }
+
+  /** Notifies every resident (in-app + push) that a new levy has been raised. */
+  async notifyNewLevy(estateId: string, label: string) {
+    await this.notifyAllResidents(estateId, `New levy: ${label}`, 'levy');
+  }
+
   private async notifyAllResidents(estateId: string, message: string, type: string) {
     const residents = await this.prisma.user.findMany({
       where: { role: 'RESIDENT', estateId, active: true },

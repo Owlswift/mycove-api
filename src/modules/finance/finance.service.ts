@@ -8,12 +8,14 @@ import { PrismaService } from '../../database/prisma.service';
 import { AllocateFundsDto } from './dto/allocate-funds.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { computeDuesAccrual, DuesService } from '../dues/dues.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class FinanceService {
   constructor(
     private prisma: PrismaService,
     private dues: DuesService,
+    private notifications: NotificationsService,
   ) {}
 
   async getDuesRate(estateId: string) {
@@ -277,7 +279,13 @@ export class FinanceService {
   async recordDuesPayment(estateId: string, residentId: string, amount: number, note?: string, mediaBase64?: string) {
     const resident = await this.prisma.user.findFirst({ where: { id: residentId, estateId } });
     if (!resident) throw new NotFoundException('Resident not found');
-    return this.dues.recordManualDuesPayment(residentId, amount, note, mediaBase64);
+    const result = await this.dues.recordManualDuesPayment(residentId, amount, note, mediaBase64);
+    await this.notifications.create(
+      residentId,
+      `A dues payment of ₦${amount.toLocaleString()} was recorded on your account.`,
+      'dues',
+    );
+    return result;
   }
 
   /** Collection stats per one-off levy (e.g. a Christmas decoration fund) raised in a given fiscal year — distinct from recurring dues above. Each levy carries its own resident-level paid/unpaid breakdown for drill-down. */
@@ -349,6 +357,15 @@ export class FinanceService {
   async recordLevyPayment(estateId: string, residentId: string, levyId: string, mediaBase64?: string) {
     const resident = await this.prisma.user.findFirst({ where: { id: residentId, estateId } });
     if (!resident) throw new NotFoundException('Resident not found');
-    return this.dues.payLevy(residentId, estateId, levyId, mediaBase64);
+    const [result, levy] = await Promise.all([
+      this.dues.payLevy(residentId, estateId, levyId, mediaBase64),
+      this.prisma.levy.findUnique({ where: { id: levyId } }),
+    ]);
+    await this.notifications.create(
+      residentId,
+      `Your payment for ${levy?.label ?? 'a levy'} was recorded.`,
+      'levy',
+    );
+    return result;
   }
 }

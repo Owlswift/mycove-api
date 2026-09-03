@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { VoteDto } from './dto/vote.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 function closesInLabel(closesAt: Date): string {
   const days = Math.ceil(
@@ -18,7 +19,10 @@ function closesInLabel(closesAt: Date): string {
 
 @Injectable()
 export class PollsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   async list(userId: string, estateId: string, role: string) {
     const polls = await this.prisma.poll.findMany({
@@ -95,8 +99,8 @@ export class PollsService {
     return { message: 'Vote recorded' };
   }
 
-  create(estateId: string, dto: CreatePollDto) {
-    return this.prisma.poll.create({
+  async create(estateId: string, dto: CreatePollDto) {
+    const poll = await this.prisma.poll.create({
       data: {
         estateId,
         question: dto.question,
@@ -107,6 +111,7 @@ export class PollsService {
       },
       include: { options: true },
     });
+    await this.notifications.notifyNewPoll(estateId, dto.question);
+    return poll;
   }
-
 }

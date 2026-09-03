@@ -7,6 +7,7 @@ import {
 import * as argon2 from 'argon2';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * The estate has no self-registration — an admin creates every account with
@@ -27,7 +28,10 @@ function defaultPasswordFor(fullName: string): string {
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   listUsers(estateId: string) {
     return this.prisma.user.findMany({
@@ -127,6 +131,17 @@ export class AdminService {
     if (!user) throw new NotFoundException('User not found');
 
     await this.prisma.user.update({ where: { id: userId }, data: { active } });
+    // Best-effort — PushService.sendToUsers only pushes to accounts with
+    // `active: true`, so a revoke never actually reaches the device (by
+    // design, see its own comment); the in-app row still gets written and
+    // is there waiting if the account is restored later.
+    await this.notifications.create(
+      userId,
+      active
+        ? 'Your access has been restored — you can log in again.'
+        : 'Your access to MyCove has been revoked.',
+      'account',
+    );
     return { message: active ? 'Access restored.' : 'Access revoked.' };
   }
 }

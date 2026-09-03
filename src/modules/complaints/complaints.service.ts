@@ -2,10 +2,20 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateComplaintDto } from './dto/create-complaint.dto';
 import { ComplaintStatus } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
+
+const STATUS_LABELS: Record<ComplaintStatus, string> = {
+  SUBMITTED: 'submitted',
+  IN_REVIEW: 'in review',
+  RESOLVED: 'resolved',
+};
 
 @Injectable()
 export class ComplaintsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   list(userId: string) {
     return this.prisma.complaint.findMany({
@@ -44,9 +54,15 @@ export class ComplaintsService {
   async updateStatus(estateId: string, id: string, status: string) {
     const complaint = await this.prisma.complaint.findFirst({ where: { id, estateId } });
     if (!complaint) throw new NotFoundException('Complaint not found');
-    return this.prisma.complaint.update({
+    const updated = await this.prisma.complaint.update({
       where: { id },
       data: { status: status as ComplaintStatus },
     });
+    await this.notifications.create(
+      complaint.userId,
+      `Your complaint ${complaint.ref} is now ${STATUS_LABELS[updated.status]}.`,
+      'complaint',
+    );
+    return updated;
   }
 }
