@@ -54,6 +54,59 @@ export class AdminService {
     });
   }
 
+  async getUser(estateId: string, userId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, estateId },
+      select: {
+        id: true,
+        phone: true,
+        fullName: true,
+        role: true,
+        house: true,
+        email: true,
+        emergencyContactName: true,
+        emergencyContactPhone: true,
+        vehiclePlates: true,
+        mustResetPassword: true,
+        active: true,
+        createdAt: true,
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
+  duesHistory(estateId: string, userId: string) {
+    return this.prisma.duesLedgerEntry.findMany({
+      where: { estateId, userId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  levyPayments(estateId: string, userId: string) {
+    return this.prisma.levyPayment.findMany({
+      where: { estateId, userId },
+      include: { levy: { select: { label: true, amount: true, dueDate: true, year: true } } },
+      orderBy: { paidAt: 'desc' },
+    });
+  }
+
+  donations(estateId: string, userId: string) {
+    return this.prisma.projectDonation.findMany({
+      where: { estateId, userId },
+      include: { project: { select: { title: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  pledges(estateId: string, userId: string) {
+    return this.prisma.projectPledge.findMany({
+      where: { estateId, userId },
+      include: { project: { select: { title: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async createUser(estateId: string, dto: CreateUserDto) {
     const existing = await this.prisma.user.findUnique({
       where: { phone: dto.phone },

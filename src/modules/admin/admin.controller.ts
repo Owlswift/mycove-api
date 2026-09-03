@@ -19,6 +19,31 @@ export class AdminController {
     return this.admin.listUsers(user.estateId);
   }
 
+  @Get('users/:id')
+  getUser(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.admin.getUser(user.estateId, id);
+  }
+
+  @Get('users/:id/dues-history')
+  duesHistory(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.admin.duesHistory(user.estateId, id);
+  }
+
+  @Get('users/:id/levy-payments')
+  levyPayments(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.admin.levyPayments(user.estateId, id);
+  }
+
+  @Get('users/:id/donations')
+  donations(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.admin.donations(user.estateId, id);
+  }
+
+  @Get('users/:id/pledges')
+  pledges(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.admin.pledges(user.estateId, id);
+  }
+
   @Post('users')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateUserDto) {
     return this.admin.createUser(user.estateId, dto);
