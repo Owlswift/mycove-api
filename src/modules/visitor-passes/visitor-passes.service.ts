@@ -232,7 +232,7 @@ export class VisitorPassesService {
     });
     await this.notifications.create(
       pass.residentId,
-      `${pass.name} has entered the estate`,
+      `${pass.name} has arrived at the estate gate`,
       'visitor',
     );
     return entry;

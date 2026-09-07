@@ -54,7 +54,7 @@ async function bootstrap() {
       const isMutating = method === 'POST' || method === 'PUT';
       if (!isMutating && res.statusCode < 400) return;
       const ms = Date.now() - start;
-      let body = Buffer.concat(chunks).toString('utf8');
+      let body = safeJsonString(Buffer.concat(chunks).toString('utf8'));
       if (body.length > 2000) body = body.slice(0, 2000) + '…';
       const log = res.statusCode >= 400 ? httpLogger.warn.bind(httpLogger) : httpLogger.log.bind(httpLogger);
       log(
@@ -100,6 +100,23 @@ function safeJson(body: unknown): string {
     ]),
   );
   return JSON.stringify(redacted);
+}
+
+// Response bodies arrive as a raw string (captured off the wire, not
+// req.body), so this mirrors safeJson's redaction after parsing it —
+// login/refresh responses carry fresh accessToken/refreshToken values
+// that must never land in plaintext logs, same as the request-side
+// versions safeJson already redacts. Falls back to the raw string for a
+// non-JSON or non-object response body (e.g. plain text, an array).
+function safeJsonString(raw: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return raw;
+  return safeJson(parsed);
 }
 
 void bootstrap();
