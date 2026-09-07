@@ -6,9 +6,6 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
-/** Used only if Finance Secretary hasn't set a rate yet (see DuesSettings). */
-export const DEFAULT_MONTHLY_DUES_AMOUNT = 45000;
-
 interface DuesPayment {
   amount: number;
   createdAt: Date;
@@ -71,10 +68,19 @@ export class DuesService {
     private notifications: NotificationsService,
   ) {}
 
-  /** The current monthly dues rate, as set by Finance Secretary — falls back to the default if never configured. */
-  async getMonthlyDuesAmount(estateId: string): Promise<number> {
+  /**
+   * The current monthly dues rate, as set by Finance Secretary/Admin — null
+   * if this estate hasn't configured one yet, meaning nothing should
+   * accrue. There used to be a silent DEFAULT_MONTHLY_DUES_AMOUNT fallback
+   * here, which made every newly-created estate look like it already had
+   * dues configured (and residents already owing money) before anyone had
+   * touched the Dues page — confusing for a fresh estate with real money
+   * on the line, so it's gone. Every caller must treat null as "no
+   * accrual", not silently substitute a number.
+   */
+  async getMonthlyDuesAmount(estateId: string): Promise<number | null> {
     const settings = await this.prisma.duesSettings.findUnique({ where: { estateId } });
-    return settings?.monthlyAmount ?? DEFAULT_MONTHLY_DUES_AMOUNT;
+    return settings?.monthlyAmount ?? null;
   }
 
   async setMonthlyDuesAmount(estateId: string, monthlyAmount: number) {
@@ -117,6 +123,16 @@ export class DuesService {
       }),
       this.getMonthlyDuesAmount(user.estateId),
     ]);
+
+    if (monthlyAmount === null) {
+      return {
+        balance: 0,
+        monthsPaid: 0,
+        history: payments,
+        liable: user.duesLiable,
+        invitedByName: user.invitedBy?.fullName ?? null,
+      };
+    }
 
     const { balance, monthsPaid, monthsElapsed, accrualStart: rangeStart } = computeDuesAccrual(
       accrualStart,
@@ -169,6 +185,8 @@ export class DuesService {
       }),
       this.getMonthlyDuesAmount(estateId),
     ]);
+
+    if (monthlyAmount === null) return [];
 
     return residents
       .map((r) => {

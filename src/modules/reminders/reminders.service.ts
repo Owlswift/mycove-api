@@ -3,10 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { AnalyticsService } from '../../common/analytics/analytics.service';
 import { PrismaService } from '../../database/prisma.service';
 import { PushService } from '../push/push.service';
-import {
-  DEFAULT_MONTHLY_DUES_AMOUNT,
-  computeDuesAccrual,
-} from '../dues/dues.service';
+import { computeDuesAccrual } from '../dues/dues.service';
 
 function formatNaira(amount: number): string {
   return `₦${new Intl.NumberFormat('en-NG').format(amount)}`;
@@ -96,7 +93,8 @@ export class RemindersService {
       }),
       this.prisma.duesSettings.findUnique({ where: { estateId } }),
     ]);
-    const monthlyAmount = settings?.monthlyAmount ?? DEFAULT_MONTHLY_DUES_AMOUNT;
+    if (!settings) return 0;
+    const monthlyAmount = settings.monthlyAmount;
 
     let sent = 0;
     for (const r of residents) {

@@ -247,6 +247,18 @@ export class FinanceService {
     }
 
     const residentRows = residents.map((r) => {
+      if (monthlyAmount === null) {
+        return {
+          id: r.id,
+          fullName: r.fullName,
+          house: r.house,
+          phone: r.phone,
+          duesBalance: 0,
+          monthsPaid: 0,
+          accrued: 0,
+          paid: 0,
+        };
+      }
       const accrual = computeDuesAccrual(r.createdAt, paymentsByUser.get(r.id) ?? [], monthlyAmount, year);
       return {
         id: r.id,

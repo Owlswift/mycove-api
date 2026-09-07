@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
+import { normalizePhone } from '../../common/utils/normalize-phone';
 import { PlatformLoginDto } from './dto/platform-login.dto';
 import { CreateEstateDto } from './dto/create-estate.dto';
 import { CreateDiscoDto } from './dto/create-disco.dto';
@@ -66,7 +67,42 @@ export class PlatformService {
     if (existing) {
       throw new ConflictException('An estate with this code already exists.');
     }
-    return this.prisma.estate.create({ data: dto });
+
+    const { adminPhone, adminPassword, adminFullName, ...estateData } = dto;
+
+    if (adminPhone && !adminPassword) {
+      throw new ConflictException('adminPassword is required when adminPhone is set.');
+    }
+
+    if (!adminPhone || !adminPassword) {
+      return this.prisma.estate.create({ data: estateData });
+    }
+
+    const normalizedPhone = normalizePhone(adminPhone);
+    const existingUser = await this.prisma.user.findUnique({
+      where: { phone: normalizedPhone },
+    });
+    if (existingUser) {
+      throw new ConflictException('A user with that phone number already exists.');
+    }
+
+    const passwordHash = await argon2.hash(adminPassword);
+    const estate = await this.prisma.estate.create({
+      data: {
+        ...estateData,
+        users: {
+          create: {
+            phone: normalizedPhone,
+            fullName: adminFullName ?? 'Estate Admin',
+            role: 'ADMIN',
+            passwordHash,
+            mustResetPassword: false,
+          },
+        },
+      },
+      include: { users: { select: { id: true, phone: true, fullName: true, role: true } } },
+    });
+    return estate;
   }
 
   // ── DISCOs ───────────────────────────────────────────────────────────
