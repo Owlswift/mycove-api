@@ -8,6 +8,7 @@ import * as argon2 from 'argon2';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { resolveAddress } from '../../common/utils/address';
 
 /**
  * The estate has no self-registration — an admin creates every account with
@@ -124,6 +125,7 @@ export class AdminService {
       );
     }
 
+    const address = await resolveAddress(this.prisma, estateId, dto);
     const passwordToUse = isGuard ? dto.password! : defaultPasswordFor(dto.fullName);
     const passwordHash = await argon2.hash(passwordToUse);
     const user = await this.prisma.user.create({
@@ -132,7 +134,7 @@ export class AdminService {
         phone: dto.phone,
         fullName: dto.fullName,
         role: dto.role,
-        house: dto.house,
+        ...address,
         passwordHash,
         mustResetPassword: !isGuard,
       },

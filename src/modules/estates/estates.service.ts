@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { UpdateEmergencyContactsDto } from './dto/update-emergency-contacts.dto';
+import { UpdateStreetsDto } from './dto/update-streets.dto';
+import { UpdatePassRestrictionDto } from './dto/update-pass-restriction.dto';
 
 @Injectable()
 export class EstatesService {
@@ -71,5 +73,66 @@ export class EstatesService {
       select: { securityGuardPhone: true, estateAdminPhone: true },
     });
     return updated;
+  }
+  // ── Streets (address preloading) ──────────────────────────────────────
+
+  /** The estate's preloaded street names — empty until the admin sets some, in which case clients fall back to a free-text house address. */
+  async getStreets(estateId: string) {
+    const estate = await this.prisma.estate.findUnique({
+      where: { id: estateId },
+      select: { streets: true },
+    });
+    if (!estate) throw new NotFoundException('Estate not found');
+    return { streets: estate.streets };
+  }
+
+  async updateStreets(estateId: string, dto: UpdateStreetsDto) {
+    const estate = await this.prisma.estate.findUnique({ where: { id: estateId } });
+    if (!estate) throw new NotFoundException('Estate not found');
+
+    // Trim, drop blanks, and de-duplicate case-insensitively (keeping the
+    // first spelling) so "palm street" and "Palm Street" don't both appear.
+    const seen = new Set<string>();
+    const streets: string[] = [];
+    for (const raw of dto.streets) {
+      const name = raw.trim().replace(/\s+/g, ' ');
+      const key = name.toLowerCase();
+      if (!name || seen.has(key)) continue;
+      seen.add(key);
+      streets.push(name);
+    }
+
+    return this.prisma.estate.update({
+      where: { id: estateId },
+      data: { streets },
+      select: { streets: true },
+    });
+  }
+
+  // ── Visitor-pass dues restriction ─────────────────────────────────────
+
+  async getPassRestriction(estateId: string) {
+    const estate = await this.prisma.estate.findUnique({
+      where: { id: estateId },
+      select: { passRestrictionMonths: true },
+    });
+    if (!estate) throw new NotFoundException('Estate not found');
+    return estate;
+  }
+
+  async updatePassRestriction(estateId: string, dto: UpdatePassRestrictionDto) {
+    const estate = await this.prisma.estate.findUnique({ where: { id: estateId } });
+    if (!estate) throw new NotFoundException('Estate not found');
+
+    // undefined = leave as-is; null = turn the restriction off.
+    return this.prisma.estate.update({
+      where: { id: estateId },
+      data: {
+        ...(dto.passRestrictionMonths !== undefined && {
+          passRestrictionMonths: dto.passRestrictionMonths,
+        }),
+      },
+      select: { passRestrictionMonths: true },
+    });
   }
 }

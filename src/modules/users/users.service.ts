@@ -26,6 +26,8 @@ export class UsersService {
       fullName: user.fullName,
       role: user.role,
       house: user.house,
+      street: user.street,
+      houseNumber: user.houseNumber,
       email: user.email,
       emergencyContactName: user.emergencyContactName,
       emergencyContactPhone: user.emergencyContactPhone,

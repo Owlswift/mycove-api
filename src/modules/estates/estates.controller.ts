@@ -1,6 +1,8 @@
 import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
 import { EstatesService } from './estates.service';
 import { UpdateEmergencyContactsDto } from './dto/update-emergency-contacts.dto';
+import { UpdateStreetsDto } from './dto/update-streets.dto';
+import { UpdatePassRestrictionDto } from './dto/update-pass-restriction.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -58,5 +60,51 @@ export class AdminEstateEmergencyContactsController {
   @Patch()
   update(@CurrentUser() user: AuthUser, @Body() dto: UpdateEmergencyContactsDto) {
     return this.estates.updateEmergencyContacts(user.estateId, dto);
+  }
+}
+
+/** Streets the resident picks from when completing their profile — authenticated, and registered before the `:code` catch-all like the SOS route above. */
+@Controller('estates/streets')
+@UseGuards(JwtAuthGuard)
+export class EstateStreetsController {
+  constructor(private estates: EstatesService) {}
+
+  @Get()
+  get(@CurrentUser() user: AuthUser) {
+    return this.estates.getStreets(user.estateId);
+  }
+}
+
+@Controller('estates/admin/streets')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
+export class AdminEstateStreetsController {
+  constructor(private estates: EstatesService) {}
+
+  @Get()
+  get(@CurrentUser() user: AuthUser) {
+    return this.estates.getStreets(user.estateId);
+  }
+
+  @Patch()
+  update(@CurrentUser() user: AuthUser, @Body() dto: UpdateStreetsDto) {
+    return this.estates.updateStreets(user.estateId, dto);
+  }
+}
+
+@Controller('estates/admin/pass-restriction')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
+export class AdminEstatePassRestrictionController {
+  constructor(private estates: EstatesService) {}
+
+  @Get()
+  get(@CurrentUser() user: AuthUser) {
+    return this.estates.getPassRestriction(user.estateId);
+  }
+
+  @Patch()
+  update(@CurrentUser() user: AuthUser, @Body() dto: UpdatePassRestrictionDto) {
+    return this.estates.updatePassRestriction(user.estateId, dto);
   }
 }

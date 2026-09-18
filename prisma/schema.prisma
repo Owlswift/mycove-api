@@ -48,6 +48,14 @@ model Estate {
   /// Management-office phone shown alongside the security desk number on
   /// the SOS screen — same admin-managed lifecycle as securityGuardPhone.
   estateAdminPhone   String?
+  /// Street names the estate admin preloads, so residents pick their street
+  /// from this list and only type a house number. Empty = the estate hasn't
+  /// configured any yet, and clients fall back to a free-text house address.
+  streets            String[] @default([])
+  /// A resident owing MORE than this many months of dues can't generate
+  /// visitor passes (they're prompted to pay instead). Admin-configurable
+  /// per the estate's policy; null turns the restriction off entirely.
+  passRestrictionMonths Int? @default(2)
   imageBase64 String?
   createdAt   DateTime @default(now())
 
@@ -97,7 +105,12 @@ model User {
   pinHash               String?
   role                  Role
   fullName              String
+  /// The full display address ("12 Palm Street") used everywhere a house is
+  /// shown. When street + houseNumber are set it's composed from them (see
+  /// composeHouse); legacy/free-text estates just store it directly.
   house                 String?
+  street                String?
+  houseNumber           String?
   email                 String?
   emergencyContactName  String?
   emergencyContactPhone String?

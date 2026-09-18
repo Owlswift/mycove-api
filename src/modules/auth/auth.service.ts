@@ -13,6 +13,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { CompleteForceResetDto } from './dto/complete-force-reset.dto';
+import { resolveAddress } from '../../common/utils/address';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -200,13 +201,18 @@ export class AuthService {
 
   async completeForceReset(userId: string, dto: CompleteForceResetDto) {
     const passwordHash = await argon2.hash(dto.newPassword);
+    const { estateId } = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { estateId: true },
+    });
+    const address = await resolveAddress(this.prisma, estateId, dto);
     await this.prisma.user.update({
       where: { id: userId },
       data: {
         passwordHash,
         mustResetPassword: false,
         ...(dto.fullName !== undefined && { fullName: dto.fullName }),
-        ...(dto.house !== undefined && { house: dto.house }),
+        ...address,
         ...(dto.email !== undefined && { email: dto.email }),
         ...(dto.emergencyContactName !== undefined && {
           emergencyContactName: dto.emergencyContactName,

@@ -3,11 +3,13 @@ import {
   Logger,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateVisitorPassDto } from './dto/create-visitor-pass.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { DuesService } from '../dues/dues.service';
 
 // Validity is temporarily ignored — status is solely driven by whether the
 // pass was revoked. The guard still shows "Record Entry" for a first scan
@@ -73,6 +75,7 @@ export class VisitorPassesService {
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
+    private dues: DuesService,
   ) {}
 
   async listForResident(residentId: string, estateId: string) {
@@ -113,6 +116,20 @@ export class VisitorPassesService {
   }
 
   async create(residentId: string, estateId: string, dto: CreateVisitorPassDto) {
+    // Estate policy: a resident owing more than the configured number of
+    // months' dues can't generate passes until they've paid. The `code` lets
+    // the app show a "pay your dues" prompt instead of a generic error.
+    const restriction = await this.dues.getPassRestriction(residentId);
+    if (restriction.restricted) {
+      throw new ForbiddenException({
+        code: 'DUES_OUTSTANDING',
+        message: `You're owing ${restriction.monthsOwed} months of dues. Please pay your outstanding dues to generate visitor passes.`,
+        monthsOwed: restriction.monthsOwed,
+        balance: restriction.balance,
+        thresholdMonths: restriction.thresholdMonths,
+      });
+    }
+
     const code = await this.uniqueCode();
     const createdAt = new Date();
     const validHours = dto.validHours ?? 24;

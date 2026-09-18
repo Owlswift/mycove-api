@@ -208,6 +208,53 @@ export class DuesService {
       .sort((a, b) => b.monthsOwed - a.monthsOwed);
   }
 
+  /**
+   * Whether this resident is currently blocked from generating visitor
+   * passes for owing dues. The estate's `passRestrictionMonths` sets how
+   * many months' dues may be outstanding before the block applies (default
+   * 2, so "more than two months"); null means the estate has turned the
+   * restriction off. Same household rule as getDues(): a household member
+   * is judged on the resident who invited them, since that's whose dues
+   * actually accrue.
+   */
+  async getPassRestriction(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: {
+        estateId: true,
+        createdAt: true,
+        duesLiable: true,
+        invitedById: true,
+        invitedBy: { select: { createdAt: true } },
+        estate: { select: { passRestrictionMonths: true } },
+      },
+    });
+
+    const thresholdMonths = user.estate.passRestrictionMonths;
+    const unrestricted = { restricted: false, monthsOwed: 0, balance: 0, thresholdMonths };
+    if (thresholdMonths === null) return unrestricted;
+
+    const liableUserId = user.duesLiable ? userId : user.invitedById;
+    const accrualStart = user.duesLiable ? user.createdAt : user.invitedBy?.createdAt;
+    if (!liableUserId || !accrualStart) return unrestricted;
+
+    const [payments, monthlyAmount] = await Promise.all([
+      this.prisma.duesLedgerEntry.findMany({
+        where: { userId: liableUserId, type: 'PAYMENT' },
+      }),
+      this.getMonthlyDuesAmount(user.estateId),
+    ]);
+    if (monthlyAmount === null) return unrestricted;
+
+    const { balance, monthsElapsed, monthsPaid } = computeDuesAccrual(
+      accrualStart,
+      payments,
+      monthlyAmount,
+    );
+    const monthsOwed = Math.max(0, monthsElapsed - monthsPaid);
+    return { restricted: monthsOwed > thresholdMonths, monthsOwed, balance, thresholdMonths };
+  }
+
   /** Finance Secretary reconciling a payment that didn't come through Paystack — cash, bank transfer, etc. paid directly into the estate's account. A receipt image is the evidence; the note is just an optional label. */
   async recordManualDuesPayment(
     userId: string,

@@ -18,6 +18,15 @@ export class CreateUserDto {
   @IsString()
   house?: string;
 
+  /** Preferred over `house` when the estate has preloaded streets. */
+  @IsOptional()
+  @IsString()
+  street?: string;
+
+  @IsOptional()
+  @IsString()
+  houseNumber?: string;
+
   /** Required for GUARD accounts — the admin sets a real password directly instead of a self-service reset flow. */
   @ValidateIf((o) => o.role === 'GUARD')
   @IsString()

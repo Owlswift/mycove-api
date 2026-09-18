@@ -19,6 +19,15 @@ export class CompleteForceResetDto {
   @IsString()
   house?: string;
 
+  /** Preferred over `house` when the estate has preloaded streets. */
+  @IsOptional()
+  @IsString()
+  street?: string;
+
+  @IsOptional()
+  @IsString()
+  houseNumber?: string;
+
   @IsOptional()
   @IsEmail()
   email?: string;

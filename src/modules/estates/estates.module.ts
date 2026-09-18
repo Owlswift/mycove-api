@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import {
   AdminEstateEmergencyContactsController,
+  AdminEstatePassRestrictionController,
+  AdminEstateStreetsController,
   EstateEmergencyContactsController,
+  EstateStreetsController,
   EstatesController,
 } from './estates.controller';
 import { EstatesService } from './estates.service';
@@ -12,6 +15,9 @@ import { EstatesService } from './estates.service';
     // lookup — see the note on EstateEmergencyContactsController.
     EstateEmergencyContactsController,
     AdminEstateEmergencyContactsController,
+    EstateStreetsController,
+    AdminEstateStreetsController,
+    AdminEstatePassRestrictionController,
     EstatesController,
   ],
   providers: [EstatesService],
