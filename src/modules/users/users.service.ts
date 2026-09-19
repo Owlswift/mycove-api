@@ -42,6 +42,7 @@ export class UsersService {
       estateName: user.estate.name,
       estateAddress: user.estate.address,
       duesLiable: user.duesLiable,
+      moveInMonth: user.moveInMonth,
       invitedByName: user.invitedBy?.fullName ?? null,
     };
   }
