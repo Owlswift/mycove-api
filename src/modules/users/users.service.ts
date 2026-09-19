@@ -43,6 +43,8 @@ export class UsersService {
       estateAddress: user.estate.address,
       duesLiable: user.duesLiable,
       moveInMonth: user.moveInMonth,
+      birthMonth: user.birthMonth,
+      birthDay: user.birthDay,
       invitedByName: user.invitedBy?.fullName ?? null,
     };
   }

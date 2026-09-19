@@ -5,6 +5,7 @@ import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { SetStaffRolesDto } from './dto/set-staff-roles.dto';
 import { SetResidentTypeDto } from './dto/set-resident-type.dto';
 import { SetMoveInDto } from './dto/set-move-in.dto';
+import { SetBirthdayDto } from '../birthdays/dto/set-birthday.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -32,6 +33,11 @@ export class AdminController {
   @Patch('users/:id/move-in')
   setMoveIn(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: SetMoveInDto) {
     return this.admin.setMoveIn(user.estateId, id, dto);
+  }
+
+  @Patch('users/:id/birthday')
+  setBirthday(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: SetBirthdayDto) {
+    return this.admin.setBirthday(user.estateId, id, dto);
   }
 
   @Patch('users/:id/resident-type')

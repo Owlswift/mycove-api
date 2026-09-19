@@ -11,6 +11,8 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { SetStaffRolesDto } from './dto/set-staff-roles.dto';
 import { SetResidentTypeDto } from './dto/set-resident-type.dto';
 import { SetMoveInDto } from './dto/set-move-in.dto';
+import { SetBirthdayDto } from '../birthdays/dto/set-birthday.dto';
+import { isValidBirthday } from '../birthdays/birthday-calc';
 import { NotificationsService } from '../notifications/notifications.service';
 import { resolveAddress } from '../../common/utils/address';
 
@@ -49,6 +51,8 @@ export class AdminService {
         staffRoles: true,
         residentType: true,
         moveInMonth: true,
+        birthMonth: true,
+        birthDay: true,
         duesLiable: true,
         house: true,
         email: true,
@@ -74,6 +78,8 @@ export class AdminService {
         staffRoles: true,
         residentType: true,
         moveInMonth: true,
+        birthMonth: true,
+        birthDay: true,
         duesLiable: true,
         house: true,
         email: true,
@@ -208,6 +214,23 @@ export class AdminService {
       where: { id: userId },
       data: { residentType: dto.residentType },
       select: { id: true, residentType: true },
+    });
+  }
+
+  /** Day and month only — for residents who never open the app to add their own. */
+  async setBirthday(estateId: string, userId: string, dto: SetBirthdayDto) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, estateId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.role !== 'RESIDENT') {
+      throw new BadRequestException('Only residents have a birthday on record.');
+    }
+    if (!isValidBirthday(dto.month, dto.day)) {
+      throw new BadRequestException('That is not a real date.');
+    }
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { birthMonth: dto.month, birthDay: dto.day },
+      select: { id: true, birthMonth: true, birthDay: true },
     });
   }
 

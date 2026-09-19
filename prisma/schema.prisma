@@ -47,72 +47,73 @@ model PlatformAdmin {
 /// single `WHERE estateId = ...` and it's structurally hard to accidentally
 /// leak one estate's data into another's request.
 model Estate {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  name        String
-  address     String?
-  managedBy   String?
+  id                    String   @id @default(cuid())
+  code                  String   @unique
+  name                  String
+  address               String?
+  managedBy             String?
   /// Security-desk duty phone shown on every resident's SOS screen —
   /// managed by the estate admin (see EstatesController admin endpoints),
   /// since no GUARD account owns a number residents should dial directly.
-  securityGuardPhone String?
+  securityGuardPhone    String?
   /// Management-office phone shown alongside the security desk number on
   /// the SOS screen — same admin-managed lifecycle as securityGuardPhone.
-  estateAdminPhone   String?
+  estateAdminPhone      String?
   /// Street names the estate admin preloads, so residents pick their street
   /// from this list and only type a house number. Empty = the estate hasn't
   /// configured any yet, and clients fall back to a free-text house address.
-  streets            String[] @default([])
+  streets               String[] @default([])
   /// A resident owing MORE than this many months of dues can't generate
   /// visitor passes (they're prompted to pay instead). Admin-configurable
   /// per the estate's policy; null turns the restriction off entirely.
-  passRestrictionMonths Int? @default(2)
-  imageBase64 String?
-  createdAt   DateTime @default(now())
+  passRestrictionMonths Int?     @default(2)
+  imageBase64           String?
+  createdAt             DateTime @default(now())
 
-  users              User[]
-  deviceTokens       DeviceToken[]
-  sessions           Session[]
-  passwordResetOtps  PasswordResetOtp[]
-  announcements      Announcement[]
-  announcementReads  AnnouncementRead[]
-  meetings           Meeting[]
-  calendarEntries    CalendarEntry[]
-  duesLedgerEntries  DuesLedgerEntry[]
-  duesSettings       DuesSettings?
-  duesRates          DuesRate[]
-  levies             Levy[]
-  levyPayments       LevyPayment[]
-  payments           Payment[]
-  visitorPasses      VisitorPass[]
-  accessLogEntries   AccessLogEntry[]
-  projects           Project[]
-  projectBudgetLines ProjectBudgetLine[]
-  projectReports     ProjectReport[]
-  projectDonations   ProjectDonation[]
-  projectPledges     ProjectPledge[]
-  spotlights         Spotlight[]
-  projectAllocations ProjectAllocation[]
-  invoices           Invoice[]
-  polls              Poll[]
-  pollOptions        PollOption[]
-  pollVotes          PollVote[]
-  notifications      Notification[]
-  rulesSections      RulesSection[]
-  ruleItems          RuleItem[]
-  complaints         Complaint[]
-  utilityMeters      UtilityMeter[]
-  utilityPurchases   UtilityPurchase[]
-  wallets            Wallet[]
-  walletTransactions WalletTransaction[]
-  householdInvites   HouseholdInvite[]
-  voiceLogs          VoiceInteractionLog[]
+  users                User[]
+  deviceTokens         DeviceToken[]
+  sessions             Session[]
+  passwordResetOtps    PasswordResetOtp[]
+  announcements        Announcement[]
+  announcementReads    AnnouncementRead[]
+  meetings             Meeting[]
+  calendarEntries      CalendarEntry[]
+  duesLedgerEntries    DuesLedgerEntry[]
+  duesSettings         DuesSettings?
+  duesRates            DuesRate[]
+  birthdayCelebrations BirthdayCelebration[]
+  levies               Levy[]
+  levyPayments         LevyPayment[]
+  payments             Payment[]
+  visitorPasses        VisitorPass[]
+  accessLogEntries     AccessLogEntry[]
+  projects             Project[]
+  projectBudgetLines   ProjectBudgetLine[]
+  projectReports       ProjectReport[]
+  projectDonations     ProjectDonation[]
+  projectPledges       ProjectPledge[]
+  spotlights           Spotlight[]
+  projectAllocations   ProjectAllocation[]
+  invoices             Invoice[]
+  polls                Poll[]
+  pollOptions          PollOption[]
+  pollVotes            PollVote[]
+  notifications        Notification[]
+  rulesSections        RulesSection[]
+  ruleItems            RuleItem[]
+  complaints           Complaint[]
+  utilityMeters        UtilityMeter[]
+  utilityPurchases     UtilityPurchase[]
+  wallets              Wallet[]
+  walletTransactions   WalletTransaction[]
+  householdInvites     HouseholdInvite[]
+  voiceLogs            VoiceInteractionLog[]
 }
 
 model User {
-  id                    String   @id @default(cuid())
+  id                    String       @id @default(cuid())
   estateId              String
-  phone                 String   @unique
+  phone                 String       @unique
   passwordHash          String
   pinHash               String?
   role                  Role
@@ -121,11 +122,14 @@ model User {
   /// phone and password) and simply signs in as CHAIRMAN on the admin
   /// website, or as RESIDENT on the mobile app. Each session is issued for
   /// exactly one of these roles (see AuthService.login).
-  staffRoles            Role[]   @default([])
+  staffRoles            Role[]       @default([])
   /// Which dues rate this resident is billed at.
   residentType          ResidentType @default(REGULAR)
   /// 'YYYY-MM' — the month the resident moved in / began operating. Dues are billed from here.
   moveInMonth           String?
+  /// Birthday as day + month only (no year) — entered by the resident, or the admin.
+  birthMonth            Int?
+  birthDay              Int?
   fullName              String
   /// The full display address ("12 Palm Street") used everywhere a house is
   /// shown. When street + houseNumber are set it's composed from them (see
@@ -136,34 +140,34 @@ model User {
   email                 String?
   emergencyContactName  String?
   emergencyContactPhone String?
-  vehiclePlates         String[] @default([])
-  mustResetPassword     Boolean  @default(false)
-  active                Boolean  @default(true)
-  createdAt             DateTime @default(now())
+  vehiclePlates         String[]     @default([])
+  mustResetPassword     Boolean      @default(false)
+  active                Boolean      @default(true)
+  createdAt             DateTime     @default(now())
   /// False for a resident who joined via a household invitation — their
   /// household's dues/levy obligation is already covered by whoever
   /// invited them (see invitedById), so they're excluded from every
   /// dues/levy accrual and roster query rather than being charged again.
-  duesLiable            Boolean  @default(true)
+  duesLiable            Boolean      @default(true)
   /// Set only for accounts created by accepting a HouseholdInvite — the
   /// resident who sent that invite. Self-relation, not the invite row
   /// itself, so "my household members" is a simple findMany once the
   /// account exists.
   invitedById           String?
 
-  estate                   Estate              @relation(fields: [estateId], references: [id], onDelete: Cascade)
-  invitedBy                User?               @relation("HouseholdInviter", fields: [invitedById], references: [id])
-  householdMembers         User[]              @relation("HouseholdInviter")
-  householdInvitesSent     HouseholdInvite[]   @relation("HouseholdInviteSender")
-  householdInvitesReviewed HouseholdInvite[]   @relation("HouseholdInviteReviewer")
-  householdInviteAccepted  HouseholdInvite[]   @relation("HouseholdInviteAcceptedUser")
+  estate                   Estate                @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  invitedBy                User?                 @relation("HouseholdInviter", fields: [invitedById], references: [id])
+  householdMembers         User[]                @relation("HouseholdInviter")
+  householdInvitesSent     HouseholdInvite[]     @relation("HouseholdInviteSender")
+  householdInvitesReviewed HouseholdInvite[]     @relation("HouseholdInviteReviewer")
+  householdInviteAccepted  HouseholdInvite[]     @relation("HouseholdInviteAcceptedUser")
   announcementReads        AnnouncementRead[]
   calendarEntries          CalendarEntry[]
   duesLedgerEntries        DuesLedgerEntry[]
   levyPayments             LevyPayment[]
   payments                 Payment[]
-  visitorPasses            VisitorPass[]       @relation("ResidentPasses")
-  guardLogEntries          AccessLogEntry[]    @relation("GuardEntries")
+  visitorPasses            VisitorPass[]         @relation("ResidentPasses")
+  guardLogEntries          AccessLogEntry[]      @relation("GuardEntries")
   projectDonations         ProjectDonation[]
   projectPledges           ProjectPledge[]
   pollVotes                PollVote[]
@@ -172,15 +176,16 @@ model User {
   passwordResetOtps        PasswordResetOtp[]
   deviceTokens             DeviceToken[]
   sessions                 Session[]
-  duesRatesSet             DuesRate[]          @relation("DuesRateSetBy")
-  projectAllocations       ProjectAllocation[] @relation("AllocatedBy")
-  invoicesRaised           Invoice[]           @relation("InvoiceRaisedBy")
-  invoicesReviewed         Invoice[]           @relation("InvoiceReviewedBy")
+  duesRatesSet             DuesRate[]            @relation("DuesRateSetBy")
+  celebrations             BirthdayCelebration[] @relation("UserCelebrations")
+  projectAllocations       ProjectAllocation[]   @relation("AllocatedBy")
+  invoicesRaised           Invoice[]             @relation("InvoiceRaisedBy")
+  invoicesReviewed         Invoice[]             @relation("InvoiceReviewedBy")
   utilityMeters            UtilityMeter[]
   utilityPurchases         UtilityPurchase[]
   wallet                   Wallet?
   walletTransactions       WalletTransaction[]
-  meetingsApproved         Meeting[]           @relation("MeetingApprover")
+  meetingsApproved         Meeting[]             @relation("MeetingApprover")
   voiceLogs                VoiceInteractionLog[]
 
   @@index([estateId])
@@ -366,9 +371,9 @@ model Meeting {
   approvedAt        DateTime?
   approvedByAdminId String?
 
-  estate          Estate          @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  estate          Estate            @relation(fields: [estateId], references: [id], onDelete: Cascade)
   calendarEntries CalendarEntry[]
-  approvedByAdmin User?           @relation("MeetingApprover", fields: [approvedByAdminId], references: [id])
+  approvedByAdmin User?             @relation("MeetingApprover", fields: [approvedByAdminId], references: [id])
   reminders       MeetingReminder[]
 
   @@index([estateId])
@@ -449,23 +454,23 @@ enum DuesEntryType {
 }
 
 model DuesLedgerEntry {
-  id          String        @id @default(cuid())
-  estateId    String
-  userId      String
-  date        String
-  desc        String
-  type        DuesEntryType
-  amount      Int
-  mediaBase64 String?
+  id            String        @id @default(cuid())
+  estateId      String
+  userId        String
+  date          String
+  desc          String
+  type          DuesEntryType
+  amount        Int
+  mediaBase64   String?
   /// 'YYYY-MM' first/last month a PAYMENT covers — set on payments imported
   /// from before the app existed. periodStart also marks when that
   /// resident's billing began (they may have moved in long before joining
   /// the app), so dues aren't charged for months before it.
-  periodStart String?
-  periodEnd   String?
+  periodStart   String?
+  periodEnd     String?
   /// Groups the rows created by one CSV import.
   importBatchId String?
-  createdAt   DateTime      @default(now())
+  createdAt     DateTime      @default(now())
 
   estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -705,6 +710,8 @@ model ProjectPledge {
 enum SpotlightCategory {
   PERSON
   BUSINESS
+  /// Added automatically for a resident's birthday.
+  BIRTHDAY
 }
 
 /// A resident or local business the estate is celebrating/promoting on the
@@ -720,9 +727,38 @@ model Spotlight {
   active      Boolean           @default(true)
   createdAt   DateTime          @default(now())
 
-  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  estate      Estate               @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  celebration BirthdayCelebration?
 
   @@index([estateId])
+}
+
+/// One resident's birthday in one year: the photo and party answer they gave
+/// when prompted, and what the app has already announced so nothing is sent twice.
+model BirthdayCelebration {
+  id               String    @id @default(cuid())
+  estateId         String
+  userId           String
+  /// The calendar year of the birthday being celebrated.
+  year             Int
+  photoBase64      String?
+  /// null until the celebrant answers the "will there be a party?" prompt.
+  hasParty         Boolean?
+  partyAt          DateTime?
+  partyVenue       String?
+  respondedAt      DateTime?
+  promptedAt       DateTime?
+  partyAnnouncedAt DateTime?
+  wishSentAt       DateTime?
+  spotlightId      String?   @unique
+  createdAt        DateTime  @default(now())
+
+  estate    Estate     @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user      User       @relation("UserCelebrations", fields: [userId], references: [id], onDelete: Cascade)
+  spotlight Spotlight? @relation(fields: [spotlightId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, year])
+  @@index([estateId, year])
 }
 
 /// Money the Finance Secretary has moved from the estate treasury (total
