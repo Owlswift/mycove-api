@@ -10,12 +10,22 @@ export class SpotlightsService {
     return this.prisma.spotlight.findMany({ where: { estateId }, orderBy: { createdAt: 'desc' } });
   }
 
-  /** The single spotlight shown on the resident dashboard — most recently created active one, if any. */
-  current(estateId: string) {
-    return this.prisma.spotlight.findFirst({
+  /** Every active spotlight — the app picks which one to show, at random, each time it pops one up. */
+  active(estateId: string) {
+    return this.prisma.spotlight.findMany({
       where: { estateId, active: true },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * One active spotlight chosen at random, for app versions that ask for a
+   * single one. When several are active (say two birthdays on the same day)
+   * each request can land on a different one, so no one is always hidden.
+   */
+  async current(estateId: string) {
+    const all = await this.active(estateId);
+    return all.length === 0 ? null : all[Math.floor(Math.random() * all.length)]!;
   }
 
   create(estateId: string, dto: CreateSpotlightDto) {

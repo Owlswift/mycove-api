@@ -28,6 +28,12 @@ export class SpotlightsController {
     res.status(200).json(result ?? null);
   }
 
+  @Get('active')
+  @Roles('RESIDENT')
+  active(@CurrentUser() user: AuthUser) {
+    return this.spotlights.active(user.estateId);
+  }
+
   @Get()
   @Roles('ADMIN')
   list(@CurrentUser() user: AuthUser) {
