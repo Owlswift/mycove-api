@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
@@ -119,7 +120,10 @@ export class AdminService {
     });
   }
 
-  async createUser(estateId: string, dto: CreateUserDto) {
+  async createUser(estateId: string, callerRole: string, dto: CreateUserDto) {
+    if (dto.role === 'CHAIRMAN' && callerRole !== 'CHAIRMAN') {
+      throw new ForbiddenException('Only the estate chairman can create a chairman account.');
+    }
     const existing = await this.prisma.user.findUnique({
       where: { phone: dto.phone },
     });
@@ -170,11 +174,18 @@ export class AdminService {
    * resident). Only residents can be given staff roles; the admin role
    * itself is deliberately not grantable this way.
    */
-  async setStaffRoles(estateId: string, userId: string, dto: SetStaffRolesDto) {
+  async setStaffRoles(estateId: string, callerRole: string, userId: string, dto: SetStaffRolesDto) {
     const user = await this.prisma.user.findFirst({ where: { id: userId, estateId } });
     if (!user) throw new NotFoundException('User not found');
     if (user.role !== 'RESIDENT') {
       throw new BadRequestException('Staff roles can only be added to resident accounts.');
+    }
+    // The chairman role is the chairman's to hand over — an admin can neither
+    // grant it nor take it away.
+    const touchesChairman =
+      dto.staffRoles.includes('CHAIRMAN') !== user.staffRoles.includes('CHAIRMAN');
+    if (touchesChairman && callerRole !== 'CHAIRMAN') {
+      throw new ForbiddenException('Only the estate chairman can assign or remove the chairman role.');
     }
     return this.prisma.user.update({
       where: { id: userId },
@@ -214,10 +225,18 @@ export class AdminService {
     });
   }
 
-  async resetPassword(estateId: string, userId: string, newPassword?: string) {
+  async resetPassword(estateId: string, callerRole: string, userId: string, newPassword?: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.estateId !== estateId)
       throw new NotFoundException('User not found');
+
+    // Staff accounts (admins, finance secretary, project admin, chairman —
+    // including residents who hold one of those roles) are reset by the
+    // chairman; an admin looks after residents and guards.
+    const isStaff = (user.role !== 'RESIDENT' && user.role !== 'GUARD') || user.staffRoles.length > 0;
+    if (isStaff && callerRole !== 'CHAIRMAN') {
+      throw new ForbiddenException("Only the estate chairman can reset a staff member's password.");
+    }
 
     const isGuard = user.role === 'GUARD';
     if (isGuard && !newPassword) {

@@ -18,11 +18,13 @@ export class AdminController {
   constructor(private admin: AdminService) {}
 
   @Get('users')
+  @Roles('ADMIN', 'CHAIRMAN')
   list(@CurrentUser() user: AuthUser) {
     return this.admin.listUsers(user.estateId);
   }
 
   @Get('users/:id')
+  @Roles('ADMIN', 'CHAIRMAN')
   getUser(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.admin.getUser(user.estateId, id);
   }
@@ -42,54 +44,62 @@ export class AdminController {
   }
 
   @Patch('users/:id/staff-roles')
+  @Roles('ADMIN', 'CHAIRMAN')
   setStaffRoles(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: SetStaffRolesDto,
   ) {
-    return this.admin.setStaffRoles(user.estateId, id, dto);
+    return this.admin.setStaffRoles(user.estateId, user.role, id, dto);
   }
 
   @Get('users/:id/dues-history')
+  @Roles('ADMIN', 'CHAIRMAN')
   duesHistory(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.admin.duesHistory(user.estateId, id);
   }
 
   @Get('users/:id/levy-payments')
+  @Roles('ADMIN', 'CHAIRMAN')
   levyPayments(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.admin.levyPayments(user.estateId, id);
   }
 
   @Get('users/:id/donations')
+  @Roles('ADMIN', 'CHAIRMAN')
   donations(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.admin.donations(user.estateId, id);
   }
 
   @Get('users/:id/pledges')
+  @Roles('ADMIN', 'CHAIRMAN')
   pledges(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.admin.pledges(user.estateId, id);
   }
 
   @Post('users')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateUserDto) {
-    return this.admin.createUser(user.estateId, dto);
+    return this.admin.createUser(user.estateId, user.role, dto);
   }
 
   @Post('users/:id/reset-password')
+  @Roles('ADMIN', 'CHAIRMAN')
   resetPassword(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: ResetUserPasswordDto,
   ) {
-    return this.admin.resetPassword(user.estateId, id, dto.password);
+    return this.admin.resetPassword(user.estateId, user.role, id, dto.password);
   }
 
   @Post('users/:id/revoke')
+  @Roles('CHAIRMAN')
   revoke(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.admin.setActive(user.estateId, user.sub, id, false);
   }
 
   @Post('users/:id/restore')
+  @Roles('CHAIRMAN')
   restore(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.admin.setActive(user.estateId, user.sub, id, true);
   }

@@ -5,6 +5,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { CompleteForceResetDto } from './dto/complete-force-reset.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { SetPinDto } from './dto/set-pin.dto';
@@ -49,6 +50,13 @@ export class AuthController {
     @Body() dto: CompleteForceResetDto,
   ) {
     return this.auth.completeForceReset(user.sub, dto);
+  }
+
+  /** Anyone signed in can choose a new password, given the current one. */
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  changePassword(@CurrentUser() user: AuthUser, @Body() dto: ChangePasswordDto) {
+    return this.auth.changePassword(user.sub, dto);
   }
 
   @UseGuards(JwtAuthGuard)

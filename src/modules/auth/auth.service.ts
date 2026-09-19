@@ -13,6 +13,7 @@ import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { CompleteForceResetDto } from './dto/complete-force-reset.dto';
 import { resolveAddress } from '../../common/utils/address';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -207,6 +208,21 @@ export class AuthService {
       data: { passwordHash, mustResetPassword: false },
     });
     return { message: 'Password reset successfully.' };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!(await argon2.verify(user.passwordHash, dto.currentPassword))) {
+      throw new UnauthorizedException('Your current password is not correct.');
+    }
+    if (dto.currentPassword === dto.newPassword) {
+      throw new BadRequestException('Choose a password different from your current one.');
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await argon2.hash(dto.newPassword), mustResetPassword: false },
+    });
+    return { message: 'Password changed.' };
   }
 
   async completeForceReset(userId: string, dto: CompleteForceResetDto) {
