@@ -225,18 +225,32 @@ export class AdminService {
     });
   }
 
+  /**
+   * Who looks after whom: the admin manages residents and guards; staff
+   * accounts (admin, finance secretary, project admin, chairman — including
+   * a resident who holds one of those roles) are the chairman's to manage.
+   */
+  private assertCanManage(
+    callerRole: string,
+    target: { role: string; staffRoles: string[] },
+    action: string,
+  ) {
+    const targetIsStaff =
+      (target.role !== 'RESIDENT' && target.role !== 'GUARD') || target.staffRoles.length > 0;
+    if (targetIsStaff && callerRole !== 'CHAIRMAN') {
+      throw new ForbiddenException(`Only the estate chairman can ${action} a staff member.`);
+    }
+    if (!targetIsStaff && callerRole !== 'ADMIN') {
+      throw new ForbiddenException(`Only the admin can ${action} a resident or guard.`);
+    }
+  }
+
   async resetPassword(estateId: string, callerRole: string, userId: string, newPassword?: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.estateId !== estateId)
       throw new NotFoundException('User not found');
 
-    // Staff accounts (admins, finance secretary, project admin, chairman —
-    // including residents who hold one of those roles) are reset by the
-    // chairman; an admin looks after residents and guards.
-    const isStaff = (user.role !== 'RESIDENT' && user.role !== 'GUARD') || user.staffRoles.length > 0;
-    if (isStaff && callerRole !== 'CHAIRMAN') {
-      throw new ForbiddenException("Only the estate chairman can reset a staff member's password.");
-    }
+    this.assertCanManage(callerRole, user, 'reset the password of');
 
     const isGuard = user.role === 'GUARD';
     if (isGuard && !newPassword) {
@@ -261,12 +275,13 @@ export class AdminService {
    * JwtAuthGuard's per-request check, kills any session they're already in
    * within one request. Restoring flips it back on; nothing else changes.
    */
-  async setActive(estateId: string, callerId: string, userId: string, active: boolean) {
+  async setActive(estateId: string, callerRole: string, callerId: string, userId: string, active: boolean) {
     if (userId === callerId && !active) {
       throw new BadRequestException('You cannot revoke your own access.');
     }
     const user = await this.prisma.user.findFirst({ where: { id: userId, estateId } });
     if (!user) throw new NotFoundException('User not found');
+    this.assertCanManage(callerRole, user, active ? 'restore access for' : 'revoke access for');
 
     await this.prisma.user.update({ where: { id: userId }, data: { active } });
     // Best-effort — PushService.sendToUsers only pushes to accounts with

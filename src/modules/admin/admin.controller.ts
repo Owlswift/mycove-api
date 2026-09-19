@@ -93,14 +93,14 @@ export class AdminController {
   }
 
   @Post('users/:id/revoke')
-  @Roles('CHAIRMAN')
+  @Roles('ADMIN', 'CHAIRMAN')
   revoke(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.admin.setActive(user.estateId, user.sub, id, false);
+    return this.admin.setActive(user.estateId, user.role, user.sub, id, false);
   }
 
   @Post('users/:id/restore')
-  @Roles('CHAIRMAN')
+  @Roles('ADMIN', 'CHAIRMAN')
   restore(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.admin.setActive(user.estateId, user.sub, id, true);
+    return this.admin.setActive(user.estateId, user.role, user.sub, id, true);
   }
 }
