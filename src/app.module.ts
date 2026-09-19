@@ -27,6 +27,7 @@ import { VoiceModule } from './modules/voice/voice.module';
 import { HouseholdModule } from './modules/household/household.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
 import { BirthdaysModule } from './modules/birthdays/birthdays.module';
+import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { PlatformModule } from './modules/platform/platform.module';
 
 @Module({
@@ -61,6 +62,7 @@ import { PlatformModule } from './modules/platform/platform.module';
     // Daily 8am dues/levy/pledge reminder cron + admin "send reminders" endpoint.
     RemindersModule,
     BirthdaysModule,
+    WhatsappModule,
     PlatformModule,
   ],
 })
