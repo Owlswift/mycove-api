@@ -4,12 +4,16 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  HttpException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateVisitorPassDto } from './dto/create-visitor-pass.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DuesService } from '../dues/dues.service';
+import { WalletService } from '../wallet/wallet.service';
+import { todayInEstate } from '../birthdays/birthday-calc';
+import { lagosDayStart, tokenAllowance } from './token-charge';
 
 // Validity is temporarily ignored — status is solely driven by whether the
 // pass was revoked. The guard still shows "Record Entry" for a first scan
@@ -76,6 +80,7 @@ export class VisitorPassesService {
     private prisma: PrismaService,
     private notifications: NotificationsService,
     private dues: DuesService,
+    private wallet: WalletService,
   ) {}
 
   async listForResident(residentId: string, estateId: string) {
@@ -115,6 +120,52 @@ export class VisitorPassesService {
     };
   }
 
+  /** Tokens (passes) this resident has made today — revoked ones still count, so revoking can't be used to dodge the allowance. */
+  private async usedToday(residentId: string, estateId: string): Promise<number> {
+    const today = todayInEstate();
+    return this.prisma.visitorPass.count({
+      where: {
+        residentId,
+        estateId,
+        createdAt: { gte: lagosDayStart(today.year, today.month, today.day) },
+      },
+    });
+  }
+
+  private async allowanceState(residentId: string, estateId: string) {
+    const [estate, resident, used] = await Promise.all([
+      this.prisma.estate.findUniqueOrThrow({
+        where: { id: estateId },
+        select: {
+          tokenChargingEnabled: true,
+          tokenAllowanceRegular: true,
+          tokenAllowanceCommercial: true,
+          tokenPriceRegular: true,
+          tokenPriceCommercial: true,
+        },
+      }),
+      this.prisma.user.findUniqueOrThrow({ where: { id: residentId }, select: { residentType: true } }),
+      this.usedToday(residentId, estateId),
+    ]);
+    return tokenAllowance(
+      {
+        enabled: estate.tokenChargingEnabled,
+        allowanceRegular: estate.tokenAllowanceRegular,
+        allowanceCommercial: estate.tokenAllowanceCommercial,
+        priceRegular: estate.tokenPriceRegular,
+        priceCommercial: estate.tokenPriceCommercial,
+      },
+      resident.residentType,
+      used,
+    );
+  }
+
+  async allowance(residentId: string, estateId: string) {
+    const state = await this.allowanceState(residentId, estateId);
+    const walletBalance = state.enabled ? await this.wallet.getBalance(residentId, estateId) : 0;
+    return { ...state, walletBalance };
+  }
+
   async create(residentId: string, estateId: string, dto: CreateVisitorPassDto) {
     // Estate policy: a resident owing more than the configured number of
     // months' dues can't generate passes until they've paid. The `code` lets
@@ -130,25 +181,85 @@ export class VisitorPassesService {
       });
     }
 
+    // Paid extra tokens (only for estates the platform has switched this on
+    // for): past the daily free allowance, each token costs the extra price,
+    // taken from the wallet — but only once the resident has agreed to it.
+    const allowance = await this.allowanceState(residentId, estateId);
+    const price = allowance.nextTokenPrice;
+    if (price > 0) {
+      const balance = await this.wallet.getBalance(residentId, estateId);
+      const details = {
+        price,
+        walletBalance: balance,
+        allowance: allowance.allowance,
+        usedToday: allowance.usedToday,
+      };
+      if (balance < price) {
+        throw new HttpException(
+          {
+            code: 'EXTRA_TOKEN_INSUFFICIENT_FUNDS',
+            message: `You've used your ${allowance.allowance} free tokens today. An extra token costs ₦${price.toLocaleString('en-NG')}; top up your wallet to get one.`,
+            ...details,
+          },
+          402,
+        );
+      }
+      if (!dto.acceptExtraCharge) {
+        throw new HttpException(
+          {
+            code: 'EXTRA_TOKEN_CHARGE',
+            message: `You've used your ${allowance.allowance} free tokens today. An extra token costs ₦${price.toLocaleString('en-NG')}, taken from your wallet.`,
+            ...details,
+          },
+          402,
+        );
+      }
+    }
+
     const code = await this.uniqueCode();
+    if (price > 0) {
+      await this.wallet.debit({
+        userId: residentId,
+        estateId,
+        amount: price,
+        reference: `token_${code}`,
+        description: 'Extra visitor token',
+      });
+    }
     const createdAt = new Date();
     const validHours = dto.validHours ?? 24;
     const validUntil = new Date(
       createdAt.getTime() + validHours * 60 * 60 * 1000,
     );
 
-    const pass = await this.prisma.visitorPass.create({
-      data: {
-        residentId,
-        estateId,
-        name: dto.name,
-        phone: dto.phone,
-        plate: dto.plate || null,
-        code,
-        validUntil,
-        createdAt,
-      },
-    });
+    let pass;
+    try {
+      pass = await this.prisma.visitorPass.create({
+        data: {
+          residentId,
+          estateId,
+          name: dto.name,
+          phone: dto.phone,
+          plate: dto.plate || null,
+          code,
+          validUntil,
+          createdAt,
+          chargedAmount: price,
+        },
+      });
+    } catch (err) {
+      // The token wasn't issued — give the money back.
+      if (price > 0) {
+        await this.wallet.refund({
+          userId: residentId,
+          estateId,
+          amount: price,
+          reference: `token_refund_${code}`,
+          description: 'Extra visitor token refunded',
+        });
+      }
+      throw err;
+    }
     return {
       ...pass,
       status: statusOf(pass),

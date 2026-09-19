@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CreateVisitorPassDto {
   @IsString()
@@ -16,4 +16,9 @@ export class CreateVisitorPassDto {
   @IsOptional()
   @IsInt()
   validHours?: number = 24;
+
+  /** The resident agreed to pay the extra-token price from their wallet (see EXTRA_TOKEN_CHARGE). */
+  @IsOptional()
+  @IsBoolean()
+  acceptExtraCharge?: boolean;
 }

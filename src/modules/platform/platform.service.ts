@@ -60,6 +60,16 @@ export class PlatformService {
     });
   }
 
+  async setTokenCharging(estateId: string, enabled: boolean) {
+    const estate = await this.prisma.estate.findUnique({ where: { id: estateId } });
+    if (!estate) throw new NotFoundException('Estate not found');
+    return this.prisma.estate.update({
+      where: { id: estateId },
+      data: { tokenChargingEnabled: enabled },
+      select: { id: true, name: true, tokenChargingEnabled: true },
+    });
+  }
+
   async createEstate(dto: CreateEstateDto) {
     const existing = await this.prisma.estate.findUnique({
       where: { code: dto.code },

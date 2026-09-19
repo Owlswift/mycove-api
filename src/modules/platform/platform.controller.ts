@@ -11,6 +11,7 @@ import { PlatformService } from './platform.service';
 import { PlatformAuthGuard } from './platform-auth.guard';
 import { PlatformLoginDto } from './dto/platform-login.dto';
 import { CreateEstateDto } from './dto/create-estate.dto';
+import { SetTokenChargingDto } from './dto/set-token-charging.dto';
 import { CreateDiscoDto } from './dto/create-disco.dto';
 import { UpdateDiscoDto } from './dto/update-disco.dto';
 import { CreateWebsiteLeadDto } from './dto/create-website-lead.dto';
@@ -39,6 +40,12 @@ export class PlatformEstatesController {
   @Post()
   create(@Body() dto: CreateEstateDto) {
     return this.platform.createEstate(dto);
+  }
+
+  /** Only the platform super admin can switch paid extra tokens on or off for an estate. */
+  @Patch(':id/token-charging')
+  setTokenCharging(@Param('id') id: string, @Body() dto: SetTokenChargingDto) {
+    return this.platform.setTokenCharging(id, dto.enabled);
   }
 }
 

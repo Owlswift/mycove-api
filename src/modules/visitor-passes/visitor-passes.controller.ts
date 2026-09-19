@@ -25,6 +25,13 @@ export class VisitorPassesController {
     return this.visitorPasses.create(user.sub, user.estateId, dto);
   }
 
+  /** The resident's free-token allowance today, and what an extra token would cost. */
+  @Get('visitor-passes/allowance')
+  @Roles('RESIDENT')
+  allowance(@CurrentUser() user: AuthUser) {
+    return this.visitorPasses.allowance(user.sub, user.estateId);
+  }
+
   @Get('visitor-passes/:id')
   @Roles('RESIDENT')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {

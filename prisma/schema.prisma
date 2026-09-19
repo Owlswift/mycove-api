@@ -47,28 +47,37 @@ model PlatformAdmin {
 /// single `WHERE estateId = ...` and it's structurally hard to accidentally
 /// leak one estate's data into another's request.
 model Estate {
-  id                    String   @id @default(cuid())
-  code                  String   @unique
-  name                  String
-  address               String?
-  managedBy             String?
+  id                       String   @id @default(cuid())
+  code                     String   @unique
+  name                     String
+  address                  String?
+  managedBy                String?
   /// Security-desk duty phone shown on every resident's SOS screen —
   /// managed by the estate admin (see EstatesController admin endpoints),
   /// since no GUARD account owns a number residents should dial directly.
-  securityGuardPhone    String?
+  securityGuardPhone       String?
   /// Management-office phone shown alongside the security desk number on
   /// the SOS screen — same admin-managed lifecycle as securityGuardPhone.
-  estateAdminPhone      String?
+  estateAdminPhone         String?
   /// Street names the estate admin preloads, so residents pick their street
   /// from this list and only type a house number. Empty = the estate hasn't
   /// configured any yet, and clients fall back to a free-text house address.
-  streets               String[] @default([])
+  streets                  String[] @default([])
   /// A resident owing MORE than this many months of dues can't generate
   /// visitor passes (they're prompted to pay instead). Admin-configurable
   /// per the estate's policy; null turns the restriction off entirely.
-  passRestrictionMonths Int?     @default(2)
-  imageBase64           String?
-  createdAt             DateTime @default(now())
+  passRestrictionMonths    Int?     @default(2)
+  /// Paid extra visitor tokens — switched on per estate by the platform
+  /// super admin only (off by default). When on, a resident past their
+  /// daily free allowance pays the extra price from their wallet.
+  tokenChargingEnabled     Boolean  @default(false)
+  tokenAllowanceRegular    Int      @default(5)
+  tokenAllowanceCommercial Int      @default(20)
+  /// Naira per extra token; 0 = extra tokens are free.
+  tokenPriceRegular        Int      @default(0)
+  tokenPriceCommercial     Int      @default(0)
+  imageBase64              String?
+  createdAt                DateTime @default(now())
 
   users                User[]
   deviceTokens         DeviceToken[]
@@ -580,16 +589,18 @@ model Payment {
 }
 
 model VisitorPass {
-  id         String   @id @default(cuid())
-  estateId   String
-  residentId String
-  name       String
-  phone      String
-  plate      String?
-  code       String   @unique
-  validUntil DateTime
-  revoked    Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  id            String   @id @default(cuid())
+  estateId      String
+  residentId    String
+  name          String
+  phone         String
+  plate         String?
+  code          String   @unique
+  validUntil    DateTime
+  revoked       Boolean  @default(false)
+  /// Naira charged to the resident's wallet for this token (0 = free).
+  chargedAmount Int      @default(0)
+  createdAt     DateTime @default(now())
 
   estate           Estate           @relation(fields: [estateId], references: [id], onDelete: Cascade)
   resident         User             @relation("ResidentPasses", fields: [residentId], references: [id], onDelete: Cascade)

@@ -3,6 +3,7 @@ import { EstatesService } from './estates.service';
 import { UpdateEmergencyContactsDto } from './dto/update-emergency-contacts.dto';
 import { UpdateStreetsDto } from './dto/update-streets.dto';
 import { UpdatePassRestrictionDto } from './dto/update-pass-restriction.dto';
+import { UpdateTokenSettingsDto } from './dto/update-token-settings.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -89,6 +90,23 @@ export class AdminEstateStreetsController {
   @Patch()
   update(@CurrentUser() user: AuthUser, @Body() dto: UpdateStreetsDto) {
     return this.estates.updateStreets(user.estateId, dto);
+  }
+}
+
+@Controller('estates/admin/token-charging')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
+export class AdminEstateTokenChargingController {
+  constructor(private estates: EstatesService) {}
+
+  @Get()
+  get(@CurrentUser() user: AuthUser) {
+    return this.estates.getTokenSettings(user.estateId);
+  }
+
+  @Patch()
+  update(@CurrentUser() user: AuthUser, @Body() dto: UpdateTokenSettingsDto) {
+    return this.estates.updateTokenSettings(user.estateId, dto);
   }
 }
 

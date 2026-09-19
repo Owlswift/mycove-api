@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { UpdateEmergencyContactsDto } from './dto/update-emergency-contacts.dto';
 import { UpdateStreetsDto } from './dto/update-streets.dto';
 import { UpdatePassRestrictionDto } from './dto/update-pass-restriction.dto';
+import { UpdateTokenSettingsDto } from './dto/update-token-settings.dto';
 
 @Injectable()
 export class EstatesService {
@@ -106,6 +107,37 @@ export class EstatesService {
       where: { id: estateId },
       data: { streets },
       select: { streets: true },
+    });
+  }
+
+  // ── Paid extra visitor tokens ─────────────────────────────────────────
+
+  private readonly tokenSelect = {
+    tokenChargingEnabled: true,
+    tokenAllowanceRegular: true,
+    tokenAllowanceCommercial: true,
+    tokenPriceRegular: true,
+    tokenPriceCommercial: true,
+  } as const;
+
+  async getTokenSettings(estateId: string) {
+    const estate = await this.prisma.estate.findUnique({ where: { id: estateId }, select: this.tokenSelect });
+    if (!estate) throw new NotFoundException('Estate not found');
+    return estate;
+  }
+
+  async updateTokenSettings(estateId: string, dto: UpdateTokenSettingsDto) {
+    const estate = await this.prisma.estate.findUnique({ where: { id: estateId } });
+    if (!estate) throw new NotFoundException('Estate not found');
+    return this.prisma.estate.update({
+      where: { id: estateId },
+      data: {
+        ...(dto.tokenAllowanceRegular !== undefined && { tokenAllowanceRegular: dto.tokenAllowanceRegular }),
+        ...(dto.tokenAllowanceCommercial !== undefined && { tokenAllowanceCommercial: dto.tokenAllowanceCommercial }),
+        ...(dto.tokenPriceRegular !== undefined && { tokenPriceRegular: dto.tokenPriceRegular }),
+        ...(dto.tokenPriceCommercial !== undefined && { tokenPriceCommercial: dto.tokenPriceCommercial }),
+      },
+      select: this.tokenSelect,
     });
   }
 
