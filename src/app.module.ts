@@ -28,6 +28,7 @@ import { HouseholdModule } from './modules/household/household.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
 import { BirthdaysModule } from './modules/birthdays/birthdays.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
+import { DomesticModule } from './modules/domestic/domestic.module';
 import { PlatformModule } from './modules/platform/platform.module';
 
 @Module({
@@ -63,6 +64,7 @@ import { PlatformModule } from './modules/platform/platform.module';
     RemindersModule,
     BirthdaysModule,
     WhatsappModule,
+    DomesticModule,
     PlatformModule,
   ],
 })

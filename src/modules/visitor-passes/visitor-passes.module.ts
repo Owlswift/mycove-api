@@ -9,5 +9,6 @@ import { WalletModule } from '../wallet/wallet.module';
   imports: [NotificationsModule, DuesModule, WalletModule],
   controllers: [VisitorPassesController],
   providers: [VisitorPassesService],
+  exports: [VisitorPassesService],
 })
 export class VisitorPassesModule {}

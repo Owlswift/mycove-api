@@ -270,6 +270,31 @@ export class VisitorPassesService {
     };
   }
 
+  /**
+   * A code a domestic staff member generated for themselves over WhatsApp.
+   * It's an ordinary visitor pass as far as the guard is concerned, but it
+   * only works for a short window after it was made.
+   */
+  async issueDomesticPass(
+    staff: { id: string; name: string; phone: string; residentId: string; estateId: string },
+    validMinutes: number,
+  ) {
+    const code = await this.uniqueCode();
+    const createdAt = new Date();
+    return this.prisma.visitorPass.create({
+      data: {
+        residentId: staff.residentId,
+        estateId: staff.estateId,
+        name: staff.name,
+        phone: staff.phone,
+        code,
+        validUntil: new Date(createdAt.getTime() + validMinutes * 60_000),
+        createdAt,
+        domesticStaffId: staff.id,
+      },
+    });
+  }
+
   async verifyByCode(estateId: string, code: string) {
     const pass = await this.prisma.visitorPass.findFirst({
       where: { code, estateId },
@@ -296,6 +321,11 @@ export class VisitorPassesService {
     } else if (hasEntered && !checkedIn) {
       valid = false;
       reason = 'USED';
+    } else if (pass.domesticStaffId && !hasEntered && pass.validUntil.getTime() < Date.now()) {
+      // A domestic staff code is short-lived: it has to be used soon after
+      // it was generated. (Someone already inside can still be checked out.)
+      valid = false;
+      reason = 'EXPIRED';
     }
 
     this.logger.log(

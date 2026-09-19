@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as crypto from 'crypto';
+import { DomesticService } from '../domestic/domestic.service';
 
 /**
  * Meta's WhatsApp Cloud API calls this from its own servers — no JwtAuthGuard.
@@ -31,6 +32,8 @@ import * as crypto from 'crypto';
 @Controller('webhooks/whatsapp')
 export class WhatsappWebhookController {
   private readonly logger = new Logger(WhatsappWebhookController.name);
+
+  constructor(private domestic: DomesticService) {}
 
   @Get()
   verify(
@@ -63,18 +66,38 @@ export class WhatsappWebhookController {
       }
     }
 
-    const body = req.body as { entry?: { changes?: { value?: { messages?: unknown[]; statuses?: unknown[] } }[] }[] };
+    const body = req.body as WhatsappWebhookBody;
     let messages = 0;
     let statuses = 0;
     for (const entry of body?.entry ?? []) {
       for (const change of entry.changes ?? []) {
-        messages += change.value?.messages?.length ?? 0;
         statuses += change.value?.statuses?.length ?? 0;
+        for (const message of change.value?.messages ?? []) {
+          messages++;
+          if (message.type === 'text' && message.from && message.id && message.text?.body) {
+            // Acknowledge Meta straight away; the reply to the staff member
+            // is sent in the background, and any failure is logged, not thrown.
+            void this.domestic
+              .handleIncoming({ from: message.from, messageId: message.id, text: message.text.body })
+              .catch((e: Error) => this.logger.error(`Handling WhatsApp message ${message.id} failed: ${e.message}`));
+          }
+        }
       }
     }
     this.logger.log(`WhatsApp event received: ${messages} message(s), ${statuses} status update(s)`);
     return { received: true };
   }
+}
+
+interface WhatsappWebhookBody {
+  entry?: {
+    changes?: {
+      value?: {
+        messages?: { id?: string; from?: string; type?: string; text?: { body?: string } }[];
+        statuses?: unknown[];
+      };
+    }[];
+  }[];
 }
 
 function safeEqual(a: string, b: string): boolean {
