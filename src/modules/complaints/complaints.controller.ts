@@ -26,7 +26,7 @@ export class ComplaintsController {
   }
 
   @Get('admin/all')
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'CHAIRMAN')
   adminList(@CurrentUser() user: AuthUser) {
     return this.complaints.adminList(user.estateId);
   }

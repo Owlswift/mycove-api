@@ -14,12 +14,13 @@ export class AnnouncementsController {
   constructor(private announcements: AnnouncementsService) {}
 
   @Get()
-  @Roles('RESIDENT', 'ADMIN')
+  @Roles('RESIDENT', 'ADMIN', 'CHAIRMAN')
   list(@CurrentUser() user: AuthUser) {
     return this.announcements.list(user.sub, user.estateId);
   }
 
   @Get(':id')
+  @Roles('RESIDENT', 'ADMIN', 'CHAIRMAN')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.announcements.get(id, user.estateId);
   }
@@ -30,7 +31,7 @@ export class AnnouncementsController {
   }
 
   @Post()
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'CHAIRMAN')
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateAnnouncementDto) {
     return this.announcements.create(user.estateId, dto);
   }

@@ -56,7 +56,7 @@ export class VisitorPassesController {
   }
 
   @Get('access-log')
-  @Roles('GUARD', 'ADMIN')
+  @Roles('GUARD', 'ADMIN', 'CHAIRMAN')
   accessLog(@CurrentUser() user: AuthUser) {
     return this.visitorPasses.accessLog(user.estateId);
   }

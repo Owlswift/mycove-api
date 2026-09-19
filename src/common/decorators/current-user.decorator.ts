@@ -3,7 +3,7 @@ import type { Request } from 'express';
 
 export interface AuthUser {
   sub: string;
-  role: 'RESIDENT' | 'GUARD' | 'ADMIN' | 'FINANCE_SECRETARY' | 'PROJECT_ADMIN';
+  role: 'RESIDENT' | 'GUARD' | 'ADMIN' | 'FINANCE_SECRETARY' | 'PROJECT_ADMIN' | 'CHAIRMAN';
   estateId: string;
   jti: string;
 }

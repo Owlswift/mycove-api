@@ -12,6 +12,10 @@ enum Role {
   ADMIN
   FINANCE_SECRETARY
   PROJECT_ADMIN
+  /// The estate chairman's oversight account — read access to dues,
+  /// complaints, gate activity and projects/spending, plus posting
+  /// announcements. Nothing else is writable through it.
+  CHAIRMAN
 }
 
 /// Platform-level operator — not scoped to any estate, deliberately kept

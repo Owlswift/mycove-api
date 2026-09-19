@@ -18,7 +18,7 @@ export class FinanceController {
   constructor(private finance: FinanceService) {}
 
   @Get('summary')
-  @Roles('ADMIN', 'FINANCE_SECRETARY')
+  @Roles('ADMIN', 'FINANCE_SECRETARY', 'CHAIRMAN')
   summary(@CurrentUser() user: AuthUser) {
     return this.finance.summary(user.estateId);
   }
@@ -30,13 +30,13 @@ export class FinanceController {
   }
 
   @Get('project-budgets')
-  @Roles('ADMIN', 'FINANCE_SECRETARY', 'PROJECT_ADMIN')
+  @Roles('ADMIN', 'FINANCE_SECRETARY', 'PROJECT_ADMIN', 'CHAIRMAN')
   projectBudgets(@CurrentUser() user: AuthUser) {
     return this.finance.projectBudgets(user.estateId);
   }
 
   @Get('dues')
-  @Roles('ADMIN', 'FINANCE_SECRETARY')
+  @Roles('ADMIN', 'FINANCE_SECRETARY', 'CHAIRMAN')
   residentDues(@CurrentUser() user: AuthUser, @Query('year') year?: string) {
     return this.finance.residentDues(user.estateId, year ? Number(year) : new Date().getFullYear());
   }
@@ -93,7 +93,7 @@ export class FinanceController {
   }
 
   @Get('invoices')
-  @Roles('ADMIN', 'FINANCE_SECRETARY', 'PROJECT_ADMIN')
+  @Roles('ADMIN', 'FINANCE_SECRETARY', 'PROJECT_ADMIN', 'CHAIRMAN')
   listInvoices(@CurrentUser() user: AuthUser) {
     return this.finance.listInvoices(user.estateId);
   }

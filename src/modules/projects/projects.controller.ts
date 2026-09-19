@@ -17,7 +17,7 @@ export class ProjectsController {
   constructor(private projects: ProjectsService) {}
 
   @Get()
-  @Roles('RESIDENT', 'ADMIN', 'PROJECT_ADMIN')
+  @Roles('RESIDENT', 'ADMIN', 'PROJECT_ADMIN', 'CHAIRMAN')
   list(@CurrentUser() user: AuthUser) {
     return this.projects.list(user.estateId);
   }
@@ -28,7 +28,7 @@ export class ProjectsController {
   }
 
   @Get(':id')
-  @Roles('RESIDENT', 'ADMIN', 'PROJECT_ADMIN')
+  @Roles('RESIDENT', 'ADMIN', 'PROJECT_ADMIN', 'CHAIRMAN')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.projects.get(id, user.sub, user.estateId);
   }

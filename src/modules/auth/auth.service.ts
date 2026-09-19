@@ -30,6 +30,7 @@ const ROLE_LABELS: Record<string, string> = {
   ADMIN: 'an admin',
   FINANCE_SECRETARY: 'a finance secretary',
   PROJECT_ADMIN: 'a project admin',
+  CHAIRMAN: 'the estate chairman',
 };
 function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;
