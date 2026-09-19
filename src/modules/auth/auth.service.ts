@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
+import type { Role } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -19,10 +20,14 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 const OTP_TTL_MS = 10 * 60 * 1000;
 const RESET_TOKEN_PURPOSE = 'password-reset';
 const REFRESH_TOKEN_PURPOSE = 'refresh';
-const ACCESS_TOKEN_TTL = '15m';
-const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
-const REFRESH_TOKEN_TTL = '30d';
-const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+// Long-lived on purpose: a resident or officer stays signed in for a month
+// at a time, and a refresh token quietly renews that for up to a year. This
+// stays safe because JwtAuthGuard re-checks every request against the
+// database (revoked token, deactivated account, role no longer held).
+const ACCESS_TOKEN_TTL = '30d';
+const ACCESS_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const REFRESH_TOKEN_TTL = '365d';
+const REFRESH_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
 const ROLE_LABELS: Record<string, string> = {
   RESIDENT: 'a resident',
@@ -50,11 +55,15 @@ export class AuthService {
     if (!user)
       throw new UnauthorizedException('Incorrect phone number or password.');
 
-    if (dto.role && dto.role !== user.role) {
+    // One account can hold several roles (a resident who is also the
+    // chairman): the sign-in screen says which one this session is for.
+    const heldRoles: string[] = [user.role, ...user.staffRoles];
+    if (dto.role && !heldRoles.includes(dto.role)) {
       throw new UnauthorizedException(
         `This account is registered as ${roleLabel(user.role)}.`,
       );
     }
+    const loginRole = dto.role ?? user.role;
 
     const passwordValid = await argon2.verify(user.passwordHash, dto.password);
     if (!passwordValid)
@@ -69,7 +78,7 @@ export class AuthService {
 
     const { accessToken, refreshToken } = await this.issueSessionTokens(
       user.id,
-      user.role,
+      loginRole,
       user.estateId,
       dto.platform,
       dto.deviceName,
@@ -91,7 +100,7 @@ export class AuthService {
     deviceName?: string,
   ) {
     const accessToken = await this.signAccessToken(userId, role, estateId);
-    const refresh = await this.signRefreshToken(userId);
+    const refresh = await this.signRefreshToken(userId, role);
 
     // Web/admin logins don't send a platform — there's no "device" to
     // track a session for in that case, so this stays mobile-only.
@@ -247,7 +256,7 @@ export class AuthService {
    * the compromise (its own attempt will fail).
    */
   async refresh(dto: RefreshTokenDto) {
-    let payload: { sub: string; jti: string; purpose?: string };
+    let payload: { sub: string; jti: string; purpose?: string; role?: string };
     try {
       payload = this.jwt.verify(dto.refreshToken, {
         secret: process.env.JWT_SECRET,
@@ -279,8 +288,17 @@ export class AuthService {
       });
     }
 
+    // Keep the role this session was opened for (RESIDENT on the phone,
+    // CHAIRMAN on the website, …) as long as the account still holds it.
+    // Refresh tokens from before multi-role support carry none, so they
+    // fall back to the primary role exactly as they always did.
+    const sessionRole =
+      payload.role && [user.role, ...user.staffRoles].includes(payload.role as Role)
+        ? payload.role
+        : user.role;
+
     await this.blacklist(payload.jti, REFRESH_TOKEN_TTL_MS);
-    const refresh = await this.signRefreshToken(user.id);
+    const refresh = await this.signRefreshToken(user.id, sessionRole);
 
     // Rotate the existing session in place (same device, new jti) rather
     // than inserting a new row — this token belongs to one continuous
@@ -294,7 +312,7 @@ export class AuthService {
       .catch(() => undefined);
 
     return {
-      accessToken: await this.signAccessToken(user.id, user.role, user.estateId),
+      accessToken: await this.signAccessToken(user.id, sessionRole, user.estateId),
       refreshToken: refresh.token,
     };
   }
@@ -325,10 +343,10 @@ export class AuthService {
     );
   }
 
-  private async signRefreshToken(userId: string) {
+  private async signRefreshToken(userId: string, role: string) {
     const jti = crypto.randomUUID();
     const token = await this.jwt.signAsync(
-      { sub: userId, jti, purpose: REFRESH_TOKEN_PURPOSE },
+      { sub: userId, jti, purpose: REFRESH_TOKEN_PURPOSE, role },
       { secret: process.env.JWT_SECRET, expiresIn: REFRESH_TOKEN_TTL },
     );
     return { token, jti };

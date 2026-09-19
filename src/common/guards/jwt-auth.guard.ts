@@ -45,13 +45,20 @@ export class JwtAuthGuard implements CanActivate {
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { active: true },
+      select: { active: true, role: true, staffRoles: true },
     });
     if (!user || !user.active) {
       throw new UnauthorizedException({
         message: 'This account has been deactivated. Contact your estate admin.',
         code: 'ACCOUNT_DEACTIVATED',
       });
+    }
+    // Tokens live for weeks, so take a removed staff role away immediately
+    // rather than when the token eventually expires.
+    if (![user.role, ...user.staffRoles].includes(payload.role)) {
+      throw new UnauthorizedException(
+        'Your access has changed. Please sign in again.',
+      );
     }
 
     request.user = payload;

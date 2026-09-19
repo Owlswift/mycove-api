@@ -6,7 +6,8 @@ import { UpdateMeDto } from './dto/update-me.dto';
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  async me(userId: string) {
+  /** [sessionRole] is the role this login was opened for — a chairman who is also a resident sees CHAIRMAN on the website and RESIDENT on the phone. */
+  async me(userId: string, sessionRole: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { estate: true, invitedBy: { select: { fullName: true } } },
@@ -24,7 +25,10 @@ export class UsersService {
       id: user.id,
       phone: user.phone,
       fullName: user.fullName,
-      role: user.role,
+      role: [user.role, ...user.staffRoles].includes(sessionRole as typeof user.role)
+        ? sessionRole
+        : user.role,
+      staffRoles: user.staffRoles,
       house: user.house,
       street: user.street,
       houseNumber: user.houseNumber,
@@ -56,7 +60,7 @@ export class UsersService {
    * PATCH rewrite them would undo what the admin/invite flow recorded.
    * Empty strings clear the field rather than being rejected.
    */
-  async updateMe(userId: string, dto: UpdateMeDto) {
+  async updateMe(userId: string, dto: UpdateMeDto, sessionRole: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
@@ -74,6 +78,6 @@ export class UsersService {
     });
 
     // Same response shape as me() — callers refresh straight off it.
-    return this.me(userId);
+    return this.me(userId, sessionRole);
   }
 }

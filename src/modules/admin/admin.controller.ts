@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
+import { SetStaffRolesDto } from './dto/set-staff-roles.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -22,6 +23,15 @@ export class AdminController {
   @Get('users/:id')
   getUser(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.admin.getUser(user.estateId, id);
+  }
+
+  @Patch('users/:id/staff-roles')
+  setStaffRoles(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: SetStaffRolesDto,
+  ) {
+    return this.admin.setStaffRoles(user.estateId, id, dto);
   }
 
   @Get('users/:id/dues-history')

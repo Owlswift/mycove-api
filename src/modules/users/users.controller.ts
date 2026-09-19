@@ -12,11 +12,11 @@ export class UsersController {
 
   @Get('me')
   me(@CurrentUser() user: AuthUser) {
-    return this.users.me(user.sub);
+    return this.users.me(user.sub, user.role);
   }
 
   @Patch('me')
   updateMe(@CurrentUser() user: AuthUser, @Body() dto: UpdateMeDto) {
-    return this.users.updateMe(user.sub, dto);
+    return this.users.updateMe(user.sub, dto, user.role);
   }
 }

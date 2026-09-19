@@ -108,6 +108,12 @@ model User {
   passwordHash          String
   pinHash               String?
   role                  Role
+  /// Extra roles this person can act as besides their primary [role] — e.g.
+  /// a resident who is also the estate chairman keeps ONE account (same
+  /// phone and password) and simply signs in as CHAIRMAN on the admin
+  /// website, or as RESIDENT on the mobile app. Each session is issued for
+  /// exactly one of these roles (see AuthService.login).
+  staffRoles            Role[]   @default([])
   fullName              String
   /// The full display address ("12 Palm Street") used everywhere a house is
   /// shown. When street + houseNumber are set it's composed from them (see

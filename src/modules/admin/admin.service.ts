@@ -7,6 +7,7 @@ import {
 import * as argon2 from 'argon2';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { SetStaffRolesDto } from './dto/set-staff-roles.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { resolveAddress } from '../../common/utils/address';
 
@@ -42,6 +43,7 @@ export class AdminService {
         phone: true,
         fullName: true,
         role: true,
+        staffRoles: true,
         house: true,
         email: true,
         emergencyContactName: true,
@@ -63,6 +65,7 @@ export class AdminService {
         phone: true,
         fullName: true,
         role: true,
+        staffRoles: true,
         house: true,
         email: true,
         emergencyContactName: true,
@@ -148,6 +151,26 @@ export class AdminService {
     });
     // Guards typed their own password in — nothing to reveal back to the admin.
     return { ...user, defaultPassword: isGuard ? null : passwordToUse };
+  }
+
+  /**
+   * Lets a resident also act as finance secretary / project admin /
+   * chairman. It's the same account and password — they choose which role
+   * to sign in as (the website's role dropdown, or the mobile app as a
+   * resident). Only residents can be given staff roles; the admin role
+   * itself is deliberately not grantable this way.
+   */
+  async setStaffRoles(estateId: string, userId: string, dto: SetStaffRolesDto) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, estateId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.role !== 'RESIDENT') {
+      throw new BadRequestException('Staff roles can only be added to resident accounts.');
+    }
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { staffRoles: [...new Set(dto.staffRoles)] },
+      select: { id: true, role: true, staffRoles: true },
+    });
   }
 
   async resetPassword(estateId: string, userId: string, newPassword?: string) {
