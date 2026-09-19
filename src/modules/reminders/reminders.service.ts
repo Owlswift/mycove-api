@@ -3,7 +3,8 @@ import { Cron } from '@nestjs/schedule';
 import { AnalyticsService } from '../../common/analytics/analytics.service';
 import { PrismaService } from '../../database/prisma.service';
 import { PushService } from '../push/push.service';
-import { computeDuesAccrual } from '../dues/dues.service';
+import { summarizeResident } from '../dues/dues-calc';
+import { loadRateBook } from '../dues/dues-rates';
 
 function formatNaira(amount: number): string {
   return `₦${new Intl.NumberFormat('en-NG').format(amount)}`;
@@ -82,23 +83,31 @@ export class RemindersService {
 
   /** Residents whose calendar-accrued dues balance is above zero. */
   private async sendDuesReminders(estateId: string): Promise<number> {
-    const [residents, settings] = await Promise.all([
+    const [residents, rates] = await Promise.all([
       this.prisma.user.findMany({
         where: { estateId, role: 'RESIDENT', active: true, duesLiable: true },
         select: {
           id: true,
           createdAt: true,
+          moveInMonth: true,
+          residentType: true,
           duesLedgerEntries: { where: { type: 'PAYMENT' } },
         },
       }),
-      this.prisma.duesSettings.findUnique({ where: { estateId } }),
+      loadRateBook(this.prisma, estateId),
     ]);
-    if (!settings) return 0;
-    const monthlyAmount = settings.monthlyAmount;
+    if (rates.isEmpty) return 0;
 
     let sent = 0;
     for (const r of residents) {
-      const { balance } = computeDuesAccrual(r.createdAt, r.duesLedgerEntries, monthlyAmount);
+      const summary = summarizeResident({
+        joinedAt: r.createdAt,
+        moveInMonth: r.moveInMonth,
+        residentType: r.residentType,
+        payments: r.duesLedgerEntries,
+        rates,
+      });
+      const balance = summary?.balance ?? 0;
       if (balance <= 0) continue;
       await this.notify(
         estateId,

@@ -7,7 +7,10 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { AllocateFundsDto } from './dto/allocate-funds.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
-import { computeDuesAccrual, DuesService } from '../dues/dues.service';
+import { DuesService } from '../dues/dues.service';
+import { DuesImportService, ImportRowInput } from '../dues/dues-import.service';
+import { loadRateBook } from '../dues/dues-rates';
+import { summarizeResident } from '../dues/dues-calc';
 import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
@@ -15,15 +18,28 @@ export class FinanceService {
   constructor(
     private prisma: PrismaService,
     private dues: DuesService,
+    private duesImport: DuesImportService,
     private notifications: NotificationsService,
   ) {}
 
-  async getDuesRate(estateId: string) {
-    return { monthlyAmount: await this.dues.getMonthlyDuesAmount(estateId) };
+  getDuesRates(estateId: string) {
+    return this.dues.listRates(estateId);
   }
 
-  setDuesRate(estateId: string, monthlyAmount: number) {
-    return this.dues.setMonthlyDuesAmount(estateId, monthlyAmount);
+  setDuesRate(
+    estateId: string,
+    userId: string,
+    dto: { residentType: 'REGULAR' | 'COMMERCIAL'; monthlyAmount: number; effectiveMonth: string },
+  ) {
+    return this.dues.setRate(estateId, userId, dto);
+  }
+
+  previewDuesImport(estateId: string, rows: ImportRowInput[], allowRepeats = false) {
+    return this.duesImport.preview(estateId, rows, allowRepeats);
+  }
+
+  commitDuesImport(estateId: string, rows: ImportRowInput[], allowRepeats = false) {
+    return this.duesImport.commit(estateId, rows, allowRepeats);
   }
 
   /**
@@ -224,57 +240,64 @@ export class FinanceService {
     });
   }
 
-  /** Per-resident dues balance and payment progress for a given fiscal year, plus estate-wide totals — the roster Finance uses to see who's paid, who hasn't, and how much that adds up to. Levies are a separate, per-purpose thing — see residentLevies(). */
-  async residentDues(estateId: string, year: number) {
-    const [residents, duesPayments, monthlyAmount] = await Promise.all([
+  /**
+   * Every resident's dues position as of today: what they've been billed
+   * since their billing began, what they've paid (in the app and from
+   * before it), what's left, and how many months that is. Includes each
+   * resident's type, since commercial residents are billed at their own
+   * rate, and the estate-wide totals. Levies are a separate, per-purpose
+   * thing — see residentLevies().
+   */
+  async residentDues(estateId: string) {
+    const [residents, duesPayments, rates, rateInfo] = await Promise.all([
       this.prisma.user.findMany({
         where: { role: 'RESIDENT', estateId, duesLiable: true },
-        select: { id: true, fullName: true, house: true, phone: true, createdAt: true },
+        select: { id: true, fullName: true, house: true, phone: true, createdAt: true, moveInMonth: true, residentType: true },
         orderBy: { fullName: 'asc' },
       }),
       this.prisma.duesLedgerEntry.findMany({
         where: { type: 'PAYMENT', estateId },
-        select: { userId: true, amount: true, createdAt: true },
+        select: { userId: true, amount: true, periodStart: true },
       }),
-      this.dues.getMonthlyDuesAmount(estateId),
+      loadRateBook(this.prisma, estateId),
+      this.dues.listRates(estateId),
     ]);
 
-    const paymentsByUser = new Map<string, { amount: number; createdAt: Date }[]>();
+    const paymentsByUser = new Map<string, { amount: number; periodStart: string | null }[]>();
     for (const payment of duesPayments) {
       const list = paymentsByUser.get(payment.userId) ?? [];
       list.push(payment);
       paymentsByUser.set(payment.userId, list);
     }
 
-    const residentRows = residents.map((r) => {
-      if (monthlyAmount === null) {
-        return {
-          id: r.id,
-          fullName: r.fullName,
-          house: r.house,
-          phone: r.phone,
-          duesBalance: 0,
-          monthsPaid: 0,
-          accrued: 0,
-          paid: 0,
-        };
-      }
-      const accrual = computeDuesAccrual(r.createdAt, paymentsByUser.get(r.id) ?? [], monthlyAmount, year);
+    const rows = residents.map((r) => {
+      const summary = summarizeResident({
+        joinedAt: r.createdAt,
+        moveInMonth: r.moveInMonth,
+        residentType: r.residentType,
+        payments: paymentsByUser.get(r.id) ?? [],
+        rates,
+      });
       return {
         id: r.id,
         fullName: r.fullName,
         house: r.house,
         phone: r.phone,
-        duesBalance: accrual.balance,
-        monthsPaid: accrual.monthsPaid,
-        accrued: accrual.accrued,
-        paid: accrual.paid,
+        residentType: r.residentType,
+        duesBalance: summary?.balance ?? 0,
+        monthsPaid: summary?.monthsCovered ?? 0,
+        monthsOwed: summary?.monthsOwed ?? 0,
+        monthsElapsed: summary?.monthsElapsed ?? 0,
+        billingStart: summary?.startMonth ?? null,
+        moveInMonth: r.moveInMonth,
+        billed: summary?.billed ?? 0,
+        paid: summary?.paid ?? 0,
       };
     });
 
-    const totals = residentRows.reduce(
+    const totals = rows.reduce(
       (acc, r) => ({
-        expected: acc.expected + r.accrued,
+        expected: acc.expected + r.billed,
         collected: acc.collected + r.paid,
         outstanding: acc.outstanding + r.duesBalance,
       }),
@@ -282,9 +305,13 @@ export class FinanceService {
     );
 
     return {
-      monthlyAmount,
+      // What each resident type pays this month — null until a rate is set.
+      currentRates: {
+        REGULAR: rateInfo.current.REGULAR?.monthlyAmount ?? null,
+        COMMERCIAL: rateInfo.current.COMMERCIAL?.monthlyAmount ?? null,
+      },
       totals,
-      residents: residentRows.map(({ accrued, paid, ...rest }) => rest),
+      residents: rows.map(({ billed, paid, ...rest }) => rest),
     };
   }
 

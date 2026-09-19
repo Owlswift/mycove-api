@@ -3,6 +3,8 @@ import { AdminService } from './admin.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { SetStaffRolesDto } from './dto/set-staff-roles.dto';
+import { SetResidentTypeDto } from './dto/set-resident-type.dto';
+import { SetMoveInDto } from './dto/set-move-in.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -23,6 +25,20 @@ export class AdminController {
   @Get('users/:id')
   getUser(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.admin.getUser(user.estateId, id);
+  }
+
+  @Patch('users/:id/move-in')
+  setMoveIn(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: SetMoveInDto) {
+    return this.admin.setMoveIn(user.estateId, id, dto);
+  }
+
+  @Patch('users/:id/resident-type')
+  setResidentType(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: SetResidentTypeDto,
+  ) {
+    return this.admin.setResidentType(user.estateId, id, dto);
   }
 
   @Patch('users/:id/staff-roles')

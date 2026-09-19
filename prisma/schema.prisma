@@ -18,6 +18,13 @@ enum Role {
   CHAIRMAN
 }
 
+/// Commercial residents (shops, offices) are billed a different monthly dues
+/// rate from regular residents — see DuesRate.
+enum ResidentType {
+  REGULAR
+  COMMERCIAL
+}
+
 /// Platform-level operator — not scoped to any estate, deliberately kept
 /// out of the User model rather than given a null-able estateId, since
 /// "belongs to no estate" is a different kind of account, not an edge
@@ -73,6 +80,7 @@ model Estate {
   calendarEntries    CalendarEntry[]
   duesLedgerEntries  DuesLedgerEntry[]
   duesSettings       DuesSettings?
+  duesRates          DuesRate[]
   levies             Levy[]
   levyPayments       LevyPayment[]
   payments           Payment[]
@@ -114,6 +122,10 @@ model User {
   /// website, or as RESIDENT on the mobile app. Each session is issued for
   /// exactly one of these roles (see AuthService.login).
   staffRoles            Role[]   @default([])
+  /// Which dues rate this resident is billed at.
+  residentType          ResidentType @default(REGULAR)
+  /// 'YYYY-MM' — the month the resident moved in / began operating. Dues are billed from here.
+  moveInMonth           String?
   fullName              String
   /// The full display address ("12 Palm Street") used everywhere a house is
   /// shown. When street + houseNumber are set it's composed from them (see
@@ -160,6 +172,7 @@ model User {
   passwordResetOtps        PasswordResetOtp[]
   deviceTokens             DeviceToken[]
   sessions                 Session[]
+  duesRatesSet             DuesRate[]          @relation("DuesRateSetBy")
   projectAllocations       ProjectAllocation[] @relation("AllocatedBy")
   invoicesRaised           Invoice[]           @relation("InvoiceRaisedBy")
   invoicesReviewed         Invoice[]           @relation("InvoiceReviewedBy")
@@ -444,6 +457,14 @@ model DuesLedgerEntry {
   type        DuesEntryType
   amount      Int
   mediaBase64 String?
+  /// 'YYYY-MM' first/last month a PAYMENT covers — set on payments imported
+  /// from before the app existed. periodStart also marks when that
+  /// resident's billing began (they may have moved in long before joining
+  /// the app), so dues aren't charged for months before it.
+  periodStart String?
+  periodEnd   String?
+  /// Groups the rows created by one CSV import.
+  importBatchId String?
   createdAt   DateTime      @default(now())
 
   estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
@@ -462,6 +483,28 @@ model DuesSettings {
   monthlyAmount Int    @default(45000)
 
   estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+}
+
+/// The estate's dues rate history, one chain per resident type. A row says
+/// "from [effectiveMonth] onward, this type is charged [monthlyAmount]"; the
+/// rate for any month is the latest row effective on or before it. Rows are
+/// never edited or deleted — changing the rate adds a row — so the estate
+/// keeps a record of every previous rate, when it was set and by whom, and
+/// which month it took effect. (Replaces the single DuesSettings amount.)
+model DuesRate {
+  id             String       @id @default(cuid())
+  estateId       String
+  residentType   ResidentType
+  monthlyAmount  Int
+  /// 'YYYY-MM' — the first month this rate is charged for.
+  effectiveMonth String
+  createdAt      DateTime     @default(now())
+  createdById    String?
+
+  estate    Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("DuesRateSetBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([estateId, residentType, effectiveMonth])
 }
 
 model Levy {

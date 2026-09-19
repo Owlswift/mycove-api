@@ -8,6 +8,8 @@ import * as argon2 from 'argon2';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { SetStaffRolesDto } from './dto/set-staff-roles.dto';
+import { SetResidentTypeDto } from './dto/set-resident-type.dto';
+import { SetMoveInDto } from './dto/set-move-in.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { resolveAddress } from '../../common/utils/address';
 
@@ -44,6 +46,9 @@ export class AdminService {
         fullName: true,
         role: true,
         staffRoles: true,
+        residentType: true,
+        moveInMonth: true,
+        duesLiable: true,
         house: true,
         email: true,
         emergencyContactName: true,
@@ -66,6 +71,9 @@ export class AdminService {
         fullName: true,
         role: true,
         staffRoles: true,
+        residentType: true,
+        moveInMonth: true,
+        duesLiable: true,
         house: true,
         email: true,
         emergencyContactName: true,
@@ -137,6 +145,8 @@ export class AdminService {
         phone: dto.phone,
         fullName: dto.fullName,
         role: dto.role,
+        ...(dto.role === 'RESIDENT' && dto.residentType && { residentType: dto.residentType }),
+        ...(dto.role === 'RESIDENT' && dto.moveInMonth && { moveInMonth: dto.moveInMonth }),
         ...address,
         passwordHash,
         mustResetPassword: !isGuard,
@@ -170,6 +180,37 @@ export class AdminService {
       where: { id: userId },
       data: { staffRoles: [...new Set(dto.staffRoles)] },
       select: { id: true, role: true, staffRoles: true },
+    });
+  }
+
+  /**
+   * Regular or commercial — decides which dues rate the resident is billed
+   * at. It applies to their whole billing history, not just from now.
+   */
+  async setResidentType(estateId: string, userId: string, dto: SetResidentTypeDto) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, estateId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.role !== 'RESIDENT') {
+      throw new BadRequestException('Only residents have a resident type.');
+    }
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { residentType: dto.residentType },
+      select: { id: true, residentType: true },
+    });
+  }
+
+  /** The month a resident moved in — dues are billed from here, so changing it re-works their balance. */
+  async setMoveIn(estateId: string, userId: string, dto: SetMoveInDto) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, estateId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.role !== 'RESIDENT') {
+      throw new BadRequestException('Only residents have a move-in month.');
+    }
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { moveInMonth: dto.moveInMonth },
+      select: { id: true, moveInMonth: true },
     });
   }
 

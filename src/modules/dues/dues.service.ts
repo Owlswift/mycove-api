@@ -1,65 +1,13 @@
 import {
+  BadRequestException,
   Injectable,
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-
-interface DuesPayment {
-  amount: number;
-  createdAt: Date;
-}
-
-/** Whole calendar months between two dates, inclusive of the start month — clamped to [0, 12] since a dues year never spans more than that. */
-function monthsBetweenInclusive(start: Date, end: Date): number {
-  if (end < start) return 0;
-  const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1;
-  return Math.min(12, Math.max(0, months));
-}
-
-/**
- * Dues accrue automatically by the calendar rather than needing anyone to
- * manually charge a resident each month: the amount owed for a given dues
- * year is (months elapsed that year, up to now or year-end for a past year)
- * × the monthly rate, minus what's actually been paid within that same
- * year. A resident who pays the full annual amount up front immediately
- * reads as owing nothing for the rest of the year; a resident who skips
- * months sees each missed month's charge pile onto the balance. Each dues
- * year is self-contained — a prior year's unpaid balance doesn't carry
- * forward into this one.
- */
-export function computeDuesAccrual(
-  residentSince: Date,
-  payments: DuesPayment[],
-  monthlyAmount: number,
-  year: number = new Date().getFullYear(),
-  today: Date = new Date(),
-) {
-  const duesYearStart = new Date(year, 0, 1);
-  const duesYearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
-  // For a past year, accrual runs through Dec 31; for the current year, only
-  // up to today; a future year hasn't started accruing at all.
-  const accrualEnd = today < duesYearStart ? new Date(year, 0, 0) : today < duesYearEnd ? today : duesYearEnd;
-  const accrualStart = residentSince > duesYearStart ? residentSince : duesYearStart;
-
-  const monthsElapsed = monthsBetweenInclusive(accrualStart, accrualEnd);
-  const accrued = monthsElapsed * monthlyAmount;
-
-  const paidThisDuesYear = payments
-    .filter((p) => p.createdAt >= duesYearStart && p.createdAt <= duesYearEnd)
-    .reduce((sum, p) => sum + p.amount, 0);
-  const monthsPaid = Math.min(12, Math.floor(paidThisDuesYear / monthlyAmount));
-
-  return {
-    accrued,
-    paid: paidThisDuesYear,
-    balance: Math.max(0, accrued - paidThisDuesYear),
-    monthsElapsed,
-    monthsPaid,
-    accrualStart,
-  };
-}
+import { isMonthKey, monthKeyOf, ResidentTypeKey, summarizeResident } from './dues-calc';
+import { loadRateBook } from './dues-rates';
 
 @Injectable()
 export class DuesService {
@@ -69,27 +17,80 @@ export class DuesService {
   ) {}
 
   /**
-   * The current monthly dues rate, as set by Finance Secretary/Admin — null
-   * if this estate hasn't configured one yet, meaning nothing should
-   * accrue. There used to be a silent DEFAULT_MONTHLY_DUES_AMOUNT fallback
-   * here, which made every newly-created estate look like it already had
-   * dues configured (and residents already owing money) before anyone had
-   * touched the Dues page — confusing for a fresh estate with real money
-   * on the line, so it's gone. Every caller must treat null as "no
-   * accrual", not silently substitute a number.
+   * The estate's dues rates: what each resident type pays this month, and
+   * the complete history — every rate ever set, when it was entered, by
+   * whom, and which month it took effect. Rows are never edited or
+   * removed (see DuesRate), so this is the audit trail.
    */
-  async getMonthlyDuesAmount(estateId: string): Promise<number | null> {
-    const settings = await this.prisma.duesSettings.findUnique({ where: { estateId } });
-    return settings?.monthlyAmount ?? null;
+  async listRates(estateId: string) {
+    const rows = await this.prisma.duesRate.findMany({
+      where: { estateId },
+      orderBy: [{ createdAt: 'desc' }],
+      include: { createdBy: { select: { id: true, fullName: true } } },
+    });
+    const book = await loadRateBook(this.prisma, estateId);
+    const currentMonth = monthKeyOf(new Date());
+
+    const current = (type: ResidentTypeKey) => {
+      const entry = book.entryFor(type, currentMonth);
+      return entry
+        ? {
+            monthlyAmount: entry.monthlyAmount,
+            effectiveMonth: entry.effectiveMonth,
+            // Commercial residents are billed at the regular rate until a
+            // commercial rate takes effect.
+            usesRegularRate: entry.residentType !== type,
+          }
+        : null;
+    };
+
+    return {
+      currentMonth,
+      current: { REGULAR: current('REGULAR'), COMMERCIAL: current('COMMERCIAL') },
+      rates: rows.map((r) => ({
+        id: r.id,
+        residentType: r.residentType,
+        monthlyAmount: r.monthlyAmount,
+        effectiveMonth: r.effectiveMonth,
+        createdAt: r.createdAt,
+        createdBy: r.createdBy,
+      })),
+    };
   }
 
-  async setMonthlyDuesAmount(estateId: string, monthlyAmount: number) {
-    await this.prisma.duesSettings.upsert({
-      where: { estateId },
-      create: { estateId, monthlyAmount },
-      update: { monthlyAmount },
+  /**
+   * Sets the rate a resident type pays from [effectiveMonth] onward. It
+   * never rewrites the past: the new row simply starts applying at that
+   * month, and every earlier month keeps the rate it already had. A past
+   * month is allowed so the estate's earlier rates can be entered when
+   * setting up.
+   */
+  async setRate(
+    estateId: string,
+    userId: string,
+    dto: { residentType: ResidentTypeKey; monthlyAmount: number; effectiveMonth: string },
+  ) {
+    if (!isMonthKey(dto.effectiveMonth)) {
+      throw new BadRequestException('Choose the month the new rate starts, like 2026-10.');
+    }
+    if (!Number.isInteger(dto.monthlyAmount) || dto.monthlyAmount <= 0) {
+      throw new BadRequestException('The monthly amount must be a whole number of naira above zero.');
+    }
+    const currentYear = new Date().getUTCFullYear();
+    if (Number(dto.effectiveMonth.slice(0, 4)) > currentYear + 5) {
+      throw new BadRequestException('That start month is too far in the future.');
+    }
+
+    await this.prisma.duesRate.create({
+      data: {
+        estateId,
+        residentType: dto.residentType,
+        monthlyAmount: dto.monthlyAmount,
+        effectiveMonth: dto.effectiveMonth,
+        createdById: userId,
+      },
     });
-    return { message: 'Monthly dues rate updated.' };
+    return this.listRates(estateId);
   }
 
   async getDues(userId: string) {
@@ -97,10 +98,12 @@ export class DuesService {
       where: { id: userId },
       select: {
         createdAt: true,
+        moveInMonth: true,
         estateId: true,
         duesLiable: true,
+        residentType: true,
         invitedById: true,
-        invitedBy: { select: { fullName: true, createdAt: true } },
+        invitedBy: { select: { fullName: true, createdAt: true, moveInMonth: true, residentType: true } },
       },
     });
 
@@ -110,21 +113,29 @@ export class DuesService {
     // household's actual balance/history (read-only), just not pay it
     // themselves — see DuesController's payment endpoints, which stay
     // keyed off the liable resident's own account.
+    const liable = user.duesLiable ? user : user.invitedBy;
     const liableUserId = user.duesLiable ? userId : user.invitedById;
-    const accrualStart = user.duesLiable ? user.createdAt : user.invitedBy?.createdAt;
-    if (!liableUserId || !accrualStart) {
+    if (!liable || !liableUserId) {
       return { balance: 0, monthsPaid: 0, history: [], liable: false, invitedByName: user.invitedBy?.fullName ?? null };
     }
 
-    const [payments, monthlyAmount] = await Promise.all([
+    const [payments, rates] = await Promise.all([
       this.prisma.duesLedgerEntry.findMany({
         where: { userId: liableUserId, type: 'PAYMENT' },
         orderBy: { createdAt: 'desc' },
       }),
-      this.getMonthlyDuesAmount(user.estateId),
+      loadRateBook(this.prisma, user.estateId),
     ]);
 
-    if (monthlyAmount === null) {
+    const summary = summarizeResident({
+      joinedAt: liable.createdAt,
+      moveInMonth: liable.moveInMonth,
+      residentType: liable.residentType,
+      payments,
+      rates,
+    });
+
+    if (!summary) {
       return {
         balance: 0,
         monthsPaid: 0,
@@ -134,22 +145,25 @@ export class DuesService {
       };
     }
 
-    const { balance, monthsPaid, monthsElapsed, accrualStart: rangeStart } = computeDuesAccrual(
-      accrualStart,
-      payments,
-      monthlyAmount,
-    );
-
-    // Synthesized, one per elapsed month — dues aren't manually charged, so
-    // there's no stored row to show; this is purely a display line.
-    const charges = Array.from({ length: monthsElapsed }, (_, i) => {
-      const monthDate = new Date(rangeStart.getFullYear(), rangeStart.getMonth() + i, 1);
+    // Synthesized, one per billed month — dues aren't manually charged, so
+    // there's no stored row to show; this is purely a display line. Each
+    // month shows the rate that applied in it, so a rate change is visible
+    // in the history.
+    const thisYear = String(new Date().getUTCFullYear());
+    const charges = summary.months.map((m) => {
+      const monthDate = new Date(Date.UTC(Number(m.month.slice(0, 4)), Number(m.month.slice(5, 7)) - 1, 1));
+      const sameYear = m.month.startsWith(thisYear);
       return {
-        id: `charge-${monthDate.getFullYear()}-${monthDate.getMonth()}`,
-        date: monthDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-        desc: `${monthDate.toLocaleDateString('en-GB', { month: 'long' })} Estate Dues`,
+        id: `charge-${m.month}`,
+        date: monthDate.toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          ...(sameYear ? {} : { year: 'numeric' as const }),
+          timeZone: 'UTC',
+        }),
+        desc: `${monthDate.toLocaleDateString('en-GB', { month: 'long', ...(sameYear ? {} : { year: 'numeric' as const }), timeZone: 'UTC' })} Estate Dues`,
         type: 'CHARGE' as const,
-        amount: monthlyAmount,
+        amount: m.charge,
         createdAt: monthDate,
       };
     });
@@ -158,7 +172,11 @@ export class DuesService {
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     );
 
-    return { balance, monthsPaid, history, liable: user.duesLiable, invitedByName: user.invitedBy?.fullName ?? null };
+    // "Months paid this year" — what the app has always shown; the
+    // all-time picture is `balance`.
+    const monthsPaid = summary.months.filter((m) => m.month.startsWith(thisYear) && m.paid >= m.charge).length;
+
+    return { balance: summary.balance, monthsPaid, history, liable: user.duesLiable, invitedByName: user.invitedBy?.fullName ?? null };
   }
 
   /**
@@ -169,7 +187,7 @@ export class DuesService {
    * they're actually asked about at the gate ("is this house owing?").
    */
   async listOwingResidents(estateId: string) {
-    const [residents, monthlyAmount] = await Promise.all([
+    const [residents, rates] = await Promise.all([
       this.prisma.user.findMany({
         where: { estateId, role: 'RESIDENT', active: true, duesLiable: true },
         select: {
@@ -177,30 +195,32 @@ export class DuesService {
           fullName: true,
           house: true,
           createdAt: true,
+          moveInMonth: true,
+          residentType: true,
           duesLedgerEntries: {
             where: { type: 'PAYMENT' },
             orderBy: { createdAt: 'desc' },
           },
         },
       }),
-      this.getMonthlyDuesAmount(estateId),
+      loadRateBook(this.prisma, estateId),
     ]);
-
-    if (monthlyAmount === null) return [];
 
     return residents
       .map((r) => {
-        const { balance, monthsElapsed, monthsPaid } = computeDuesAccrual(
-          r.createdAt,
-          r.duesLedgerEntries,
-          monthlyAmount,
-        );
+        const summary = summarizeResident({
+          joinedAt: r.createdAt,
+          moveInMonth: r.moveInMonth,
+          residentType: r.residentType,
+          payments: r.duesLedgerEntries,
+          rates,
+        });
         return {
           userId: r.id,
           fullName: r.fullName,
           house: r.house,
-          balance,
-          monthsOwed: Math.max(0, monthsElapsed - monthsPaid),
+          balance: summary?.balance ?? 0,
+          monthsOwed: summary?.monthsOwed ?? 0,
           lastPaidAt: r.duesLedgerEntries[0]?.createdAt ?? null,
         };
       })
@@ -223,9 +243,11 @@ export class DuesService {
       select: {
         estateId: true,
         createdAt: true,
+        moveInMonth: true,
         duesLiable: true,
+        residentType: true,
         invitedById: true,
-        invitedBy: { select: { createdAt: true } },
+        invitedBy: { select: { createdAt: true, moveInMonth: true, residentType: true } },
         estate: { select: { passRestrictionMonths: true } },
       },
     });
@@ -234,25 +256,32 @@ export class DuesService {
     const unrestricted = { restricted: false, monthsOwed: 0, balance: 0, thresholdMonths };
     if (thresholdMonths === null) return unrestricted;
 
+    const liable = user.duesLiable ? user : user.invitedBy;
     const liableUserId = user.duesLiable ? userId : user.invitedById;
-    const accrualStart = user.duesLiable ? user.createdAt : user.invitedBy?.createdAt;
-    if (!liableUserId || !accrualStart) return unrestricted;
+    if (!liable || !liableUserId) return unrestricted;
 
-    const [payments, monthlyAmount] = await Promise.all([
+    const [payments, rates] = await Promise.all([
       this.prisma.duesLedgerEntry.findMany({
         where: { userId: liableUserId, type: 'PAYMENT' },
       }),
-      this.getMonthlyDuesAmount(user.estateId),
+      loadRateBook(this.prisma, user.estateId),
     ]);
-    if (monthlyAmount === null) return unrestricted;
 
-    const { balance, monthsElapsed, monthsPaid } = computeDuesAccrual(
-      accrualStart,
+    const summary = summarizeResident({
+      joinedAt: liable.createdAt,
+      moveInMonth: liable.moveInMonth,
+      residentType: liable.residentType,
       payments,
-      monthlyAmount,
-    );
-    const monthsOwed = Math.max(0, monthsElapsed - monthsPaid);
-    return { restricted: monthsOwed > thresholdMonths, monthsOwed, balance, thresholdMonths };
+      rates,
+    });
+    if (!summary) return unrestricted;
+
+    return {
+      restricted: summary.monthsOwed > thresholdMonths,
+      monthsOwed: summary.monthsOwed,
+      balance: summary.balance,
+      thresholdMonths,
+    };
   }
 
   /** Finance Secretary reconciling a payment that didn't come through Paystack — cash, bank transfer, etc. paid directly into the estate's account. A receipt image is the evidence; the note is just an optional label. */

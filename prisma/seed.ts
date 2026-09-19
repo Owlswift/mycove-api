@@ -462,6 +462,12 @@ Secretary — Security Committee`;
     update: {},
     create: { estateId, monthlyAmount: 45000 },
   });
+  // The rate history dues are actually calculated from (see DuesRate).
+  if (!(await prisma.duesRate.findFirst({ where: { estateId, residentType: 'REGULAR' } }))) {
+    await prisma.duesRate.create({
+      data: { estateId, residentType: 'REGULAR', monthlyAmount: 45000, effectiveMonth: '2000-01' },
+    });
+  }
 
   // Dues charges are computed on the fly from the calendar (see
   // computeDuesAccrual in dues.service.ts) rather than stored — only real

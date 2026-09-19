@@ -3,6 +3,7 @@ import { FinanceService } from './finance.service';
 import { AllocateFundsDto } from './dto/allocate-funds.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { SetDuesRateDto } from './dto/set-dues-rate.dto';
+import { ImportDuesDto } from './dto/import-dues.dto';
 import { CreateLevyDto } from './dto/create-levy.dto';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 import { RecordLevyPaymentDto } from './dto/record-levy-payment.dto';
@@ -37,8 +38,8 @@ export class FinanceController {
 
   @Get('dues')
   @Roles('ADMIN', 'FINANCE_SECRETARY', 'CHAIRMAN')
-  residentDues(@CurrentUser() user: AuthUser, @Query('year') year?: string) {
-    return this.finance.residentDues(user.estateId, year ? Number(year) : new Date().getFullYear());
+  residentDues(@CurrentUser() user: AuthUser) {
+    return this.finance.residentDues(user.estateId);
   }
 
   @Post('dues/:residentId/record-payment')
@@ -51,16 +52,28 @@ export class FinanceController {
     return this.finance.recordDuesPayment(user.estateId, residentId, dto.amount, dto.note, dto.mediaBase64);
   }
 
-  @Get('dues-rate')
-  @Roles('ADMIN', 'FINANCE_SECRETARY')
-  getDuesRate(@CurrentUser() user: AuthUser) {
-    return this.finance.getDuesRate(user.estateId);
+  @Get('dues-rates')
+  @Roles('ADMIN', 'FINANCE_SECRETARY', 'CHAIRMAN')
+  getDuesRates(@CurrentUser() user: AuthUser) {
+    return this.finance.getDuesRates(user.estateId);
   }
 
-  @Post('dues-rate')
+  @Post('dues-rates')
   @Roles('FINANCE_SECRETARY')
   setDuesRate(@CurrentUser() user: AuthUser, @Body() dto: SetDuesRateDto) {
-    return this.finance.setDuesRate(user.estateId, dto.monthlyAmount);
+    return this.finance.setDuesRate(user.estateId, user.sub, dto);
+  }
+
+  @Post('dues-import/preview')
+  @Roles('FINANCE_SECRETARY')
+  previewDuesImport(@CurrentUser() user: AuthUser, @Body() dto: ImportDuesDto) {
+    return this.finance.previewDuesImport(user.estateId, dto.rows, dto.allowRepeats);
+  }
+
+  @Post('dues-import/commit')
+  @Roles('FINANCE_SECRETARY')
+  commitDuesImport(@CurrentUser() user: AuthUser, @Body() dto: ImportDuesDto) {
+    return this.finance.commitDuesImport(user.estateId, dto.rows, dto.allowRepeats);
   }
 
   @Get('levies')
