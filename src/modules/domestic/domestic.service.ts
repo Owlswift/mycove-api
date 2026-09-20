@@ -314,9 +314,10 @@ export class DomesticService {
 
   private async sendCode(staff: DomesticStaff, code: string, validUntil: Date) {
     const minutes = Math.max(1, Math.ceil((validUntil.getTime() - Date.now()) / 60_000));
+    const estate = await this.prisma.estate.findUnique({ where: { id: staff.estateId }, select: { name: true } });
     await this.whatsapp.sendText(
       staff.phone,
-      `Hi ${first(staff.name)}, your MyCove access code is ${code}.\nThis code expires in ${minutes} minute${minutes === 1 ? '' : 's'}. Show it at the gate and do not share it.`,
+      `${estate?.name ?? 'MyCove'}\nYour access code is ${code}.\nThis code is valid for ${minutes} minute${minutes === 1 ? '' : 's'}.\nPlease present it at the gate for entry.`,
     );
   }
 
