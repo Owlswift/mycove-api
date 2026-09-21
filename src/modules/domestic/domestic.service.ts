@@ -23,7 +23,10 @@ import {
 } from './domestic-schedule';
 import { CreateDomesticStaffDto, UpdateDomesticStaffDto } from './dto/domestic-staff.dto';
 
-type StaffWithResident = DomesticStaff & { resident: Pick<User, 'id' | 'fullName' | 'estateId'> };
+type StaffWithResident = DomesticStaff & { resident: Pick<User, 'id' | 'fullName' | 'estateId'> & { house?: string | null } };
+
+/** How long a "which household?" question stays open. */
+const CHOICE_WAIT_MINUTES = 10;
 
 const first = (fullName: string) => fullName.split(' ')[0] ?? fullName;
 
@@ -53,7 +56,41 @@ export class DomesticService {
       where: { residentId },
       orderBy: { createdAt: 'asc' },
     });
-    return staff.map((s) => this.present(s));
+    // Who is inside the estate right now (a guard has let them in and not yet out).
+    const inside = await this.prisma.accessLogEntry.findMany({
+      where: { exitAt: null, visitorPass: { domesticStaffId: { in: staff.map((s) => s.id) } } },
+      select: { visitorPass: { select: { domesticStaffId: true } } },
+    });
+    const insideIds = new Set(inside.map((e) => e.visitorPass.domesticStaffId));
+    return staff.map((s) => ({ ...this.present(s), insideNow: insideIds.has(s.id) }));
+  }
+
+  /**
+   * The gate log for a resident's domestic staff: every time a guard let one
+   * in or out. [staffId] narrows it to one person; newest first.
+   */
+  async log(residentId: string, staffId?: string, limit = 100) {
+    if (staffId) await this.owned(residentId, staffId);
+    const entries = await this.prisma.accessLogEntry.findMany({
+      where: {
+        visitorPass: {
+          residentId,
+          domesticStaffId: staffId ?? { not: null },
+        },
+      },
+      orderBy: { entryAt: 'desc' },
+      take: Math.min(Math.max(limit, 1), 200),
+      include: { visitorPass: { select: { name: true, domesticStaffId: true } } },
+    });
+    return entries.map((e) => ({
+      id: e.id,
+      staffId: e.visitorPass.domesticStaffId,
+      staffName: e.visitorPass.name,
+      entryAt: e.entryAt,
+      exitAt: e.exitAt,
+      insideNow: e.exitAt === null,
+      minutesInside: e.exitAt ? Math.max(0, Math.round((e.exitAt.getTime() - e.entryAt.getTime()) / 60_000)) : null,
+    }));
   }
 
   async create(residentId: string, estateId: string, dto: CreateDomesticStaffDto) {
@@ -63,14 +100,10 @@ export class DomesticService {
     if (phone === resident.phone) throw new BadRequestException('That is your own number.');
     const schedule = this.validatedSchedule(dto);
 
-    const existing = await this.prisma.domesticStaff.findUnique({ where: { phone } });
-    if (existing) {
-      throw new ConflictException(
-        existing.residentId === residentId
-          ? 'You have already added this number.'
-          : 'That number is already registered to another household.',
-      );
-    }
+    // The same person may work for several households, so only a repeat
+    // within THIS resident's own list is a duplicate.
+    const existing = await this.prisma.domesticStaff.findFirst({ where: { residentId, phone } });
+    if (existing) throw new ConflictException('You have already added this number.');
 
     const staff = await this.prisma.domesticStaff.create({
       data: {
@@ -211,11 +244,12 @@ export class DomesticService {
     }
 
     const phone = normalizePhone(msg.from);
-    const staff = await this.prisma.domesticStaff.findUnique({
+    const staffRows = await this.prisma.domesticStaff.findMany({
       where: { phone },
-      include: { resident: { select: { id: true, fullName: true, estateId: true } } },
+      include: { resident: { select: { id: true, fullName: true, estateId: true, house: true } } },
+      orderBy: { createdAt: 'asc' },
     });
-    if (!staff) {
+    if (staffRows.length === 0) {
       await this.whatsapp.sendText(
         phone,
         "This number isn't registered with MyCove. Ask the resident you work for to add your number in the MyCove app.",
@@ -223,12 +257,76 @@ export class DomesticService {
       return;
     }
 
-    const wantsCode = /\b(access|code|entry|enter)\b/i.test(msg.text);
+    const text = msg.text.trim();
+
+    // A staff member who works for several households was asked which one
+    // they're visiting — a number picks it.
+    const pending = await this.prisma.whatsappChoice.findUnique({ where: { phone } });
+    if (pending) {
+      const fresh = Date.now() - pending.createdAt.getTime() < CHOICE_WAIT_MINUTES * 60_000;
+      const picked = /^\d{1,2}$/.test(text) ? Number(text) : 0;
+      if (fresh && picked >= 1 && picked <= pending.staffIds.length) {
+        const chosen = staffRows.find((s) => s.id === pending.staffIds[picked - 1]);
+        await this.prisma.whatsappChoice.deleteMany({ where: { phone } });
+        if (chosen) {
+          await this.requestCode(chosen);
+          return;
+        }
+      }
+    }
+
+    const wantsCode = /\b(access|code|entry|enter)\b/i.test(text);
     if (!wantsCode) {
-      await this.whatsapp.sendText(phone, `Hi ${first(staff.name)}, send the word ACCESS to get your entry code.`);
+      await this.whatsapp.sendText(phone, `Hi ${first(staffRows[0]!.name)}, send the word ACCESS to get your entry code.`);
       return;
     }
-    await this.requestCode(staff);
+
+    if (staffRows.length === 1) {
+      await this.requestCode(staffRows[0]!);
+      return;
+    }
+    await this.requestCodeForSeveral(phone, staffRows);
+  }
+
+  /**
+   * One person, several employers. Whoever they're expected by right now is
+   * the household; if that isn't clear-cut they're asked which one.
+   */
+  private async requestCodeForSeveral(phone: string, rows: StaffWithResident[]) {
+    const expectedNow = rows.filter((s) => checkSchedule(s).allowed);
+
+    if (expectedNow.length === 1) {
+      await this.requestCode(expectedNow[0]!);
+      return;
+    }
+
+    if (expectedNow.length === 0) {
+      // Not expected anywhere at this moment — say so, and tell each employer.
+      const lines = rows.map((s) => `• ${first(s.resident.fullName)}: ${describeSchedule(s)}`).join('\n');
+      await this.whatsapp.sendText(phone, `Hi ${first(rows[0]!.name)}, you aren't expected at any household right now.\n${lines}`);
+      for (const s of rows) {
+        await this.notifyResident(
+          s.resident,
+          `${s.name} tried to get an entry code outside their set times (${describeSchedule(s)}). No code was sent.`,
+          'domestic_refused',
+        );
+      }
+      return;
+    }
+
+    // Expected at more than one place at once — ask which.
+    await this.prisma.whatsappChoice.upsert({
+      where: { phone },
+      create: { phone, staffIds: expectedNow.map((s) => s.id) },
+      update: { staffIds: expectedNow.map((s) => s.id), createdAt: new Date() },
+    });
+    const options = expectedNow
+      .map((s, i) => `${i + 1}. ${s.resident.fullName}${s.resident.house ? ` (${s.resident.house})` : ''}`)
+      .join('\n');
+    await this.whatsapp.sendText(
+      phone,
+      `Hi ${first(rows[0]!.name)}, which household are you visiting?\nReply with the number:\n${options}`,
+    );
   }
 
   private async requestCode(staff: StaffWithResident) {

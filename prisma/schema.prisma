@@ -1127,8 +1127,9 @@ model DomesticStaff {
   estateId         String
   residentId       String
   name             String
-  /// E.164, e.g. +2348012345678
-  phone            String   @unique
+  /// E.164, e.g. +2348012345678. The same person can work for several
+  /// residents: each resident has their own row for the number.
+  phone            String
   /// Days they're expected, 0 = Sunday … 6 = Saturday. Empty = any day.
   days             Int[]    @default([])
   /// "HH:mm" in estate (Lagos) time. Both null = any time of day.
@@ -1143,6 +1144,8 @@ model DomesticStaff {
   requests      DomesticAccessRequest[]
   visitorPasses VisitorPass[]
 
+  @@unique([residentId, phone])
+  @@index([phone])
   @@index([residentId])
   @@index([estateId])
 }
@@ -1176,5 +1179,13 @@ model DomesticAccessRequest {
 /// thinks failed, and a code must not be issued twice for one message.
 model WhatsappMessage {
   id        String   @id
+  createdAt DateTime @default(now())
+}
+
+/// A staff member who works for more than one resident was asked which
+/// household they're visiting; their numbered reply picks one of [staffIds].
+model WhatsappChoice {
+  phone     String   @id
+  staffIds  String[]
   createdAt DateTime @default(now())
 }
