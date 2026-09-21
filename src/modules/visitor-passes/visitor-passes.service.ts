@@ -392,6 +392,7 @@ export class VisitorPassesService {
       pass.residentId,
       `${pass.name} has arrived at the estate gate`,
       'visitor',
+      { event: 'visitor_arrived', params: (r) => [r.firstName, pass.name, r.estateName] },
     );
     return entry;
   }
@@ -415,6 +416,7 @@ export class VisitorPassesService {
       openEntry.visitorPass.residentId,
       `${openEntry.visitorPass.name} has exited the estate`,
       'visitor',
+      { event: 'visitor_left', params: (r) => [r.firstName, openEntry.visitorPass.name, r.estateName] },
     );
     return entry;
   }

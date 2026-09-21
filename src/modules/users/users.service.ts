@@ -45,6 +45,7 @@ export class UsersService {
       moveInMonth: user.moveInMonth,
       birthMonth: user.birthMonth,
       birthDay: user.birthDay,
+      whatsappNotifications: !user.whatsappOptOut,
       invitedByName: user.invitedBy?.fullName ?? null,
     };
   }
@@ -77,6 +78,7 @@ export class UsersService {
         ...(dto.emergencyContactPhone !== undefined && {
           emergencyContactPhone: dto.emergencyContactPhone?.trim() || null,
         }),
+        ...(dto.whatsappNotifications !== undefined && { whatsappOptOut: !dto.whatsappNotifications }),
       },
     });
 

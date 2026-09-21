@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { PushService } from '../push/push.service';
+import { ParamBuilder, WhatsappEvent, WhatsappNotifier } from '../whatsapp/whatsapp-notifier';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     private prisma: PrismaService,
     private push: PushService,
+    private whatsapp: WhatsappNotifier,
   ) {}
 
   list(userId: string) {
@@ -29,7 +31,12 @@ export class NotificationsService {
    * event — the one place both need to happen together, so callers
    * (visitor-pass entry/exit, payment success) only need this one method.
    */
-  async create(userId: string, message: string, type: string) {
+  async create(
+    userId: string,
+    message: string,
+    type: string,
+    whatsapp?: { event: WhatsappEvent; params: ParamBuilder },
+  ) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: { estateId: true },
@@ -42,11 +49,15 @@ export class NotificationsService {
       body: message,
       data: { type },
     });
+    // The WhatsApp copy, when this event has an approved template — in
+    // addition to the push above, never instead of it.
+    if (whatsapp) await this.whatsapp.toUser(userId, whatsapp.event, whatsapp.params);
   }
 
-  /** Notifies every resident (in-app + push) that a new announcement was published. */
+  /** Notifies every resident (in-app + push, and WhatsApp when set up) that a new announcement was published. */
   async notifyAnnouncement(estateId: string, title: string) {
-    await this.notifyAllResidents(estateId, `New announcement: ${title}`, 'announcement');
+    const userIds = await this.notifyAllResidents(estateId, `New announcement: ${title}`, 'announcement');
+    await this.whatsapp.toUsers(userIds, 'estate_notice', (r) => [r.firstName, r.estateName, title]);
   }
 
   /** Notifies every resident (in-app + push) that a project has a new update. */
@@ -64,7 +75,7 @@ export class NotificationsService {
     await this.notifyAllResidents(estateId, `New levy: ${label}`, 'levy');
   }
 
-  private async notifyAllResidents(estateId: string, message: string, type: string) {
+  private async notifyAllResidents(estateId: string, message: string, type: string): Promise<string[]> {
     const residents = await this.prisma.user.findMany({
       where: { role: 'RESIDENT', estateId, active: true },
       select: { id: true },
@@ -79,5 +90,6 @@ export class NotificationsService {
       body: message,
       data: { type },
     });
+    return userIds;
   }
 }

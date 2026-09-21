@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString } from 'class-validator';
 
 /**
  * Self-service profile updates (PATCH /users/me). Only contact-style
@@ -17,4 +17,9 @@ export class UpdateMeDto {
   @IsOptional()
   @IsString()
   emergencyContactPhone?: string | null;
+
+  /** false switches off the WhatsApp copies of notifications (push stays on). */
+  @IsOptional()
+  @IsBoolean()
+  whatsappNotifications?: boolean;
 }

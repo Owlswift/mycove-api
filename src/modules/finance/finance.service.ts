@@ -323,6 +323,10 @@ export class FinanceService {
       residentId,
       `A dues payment of ₦${amount.toLocaleString()} was recorded on your account.`,
       'dues',
+      {
+        event: 'payment_received',
+        params: (r) => [r.firstName, `₦${amount.toLocaleString('en-NG')}`, 'estate dues', 'Recorded by the estate office'],
+      },
     );
     return result;
   }
@@ -404,6 +408,10 @@ export class FinanceService {
       residentId,
       `Your payment for ${levy?.label ?? 'a levy'} was recorded.`,
       'levy',
+      {
+        event: 'payment_received',
+        params: (r) => [r.firstName, `₦${(levy?.amount ?? 0).toLocaleString('en-NG')}`, levy?.label ?? 'a levy', 'Recorded by the estate office'],
+      },
     );
     return result;
   }

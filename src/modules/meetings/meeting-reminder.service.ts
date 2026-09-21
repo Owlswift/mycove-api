@@ -4,6 +4,7 @@ import type { Meeting, MeetingReminderKind } from '@prisma/client';
 import { AnalyticsService } from '../../common/analytics/analytics.service';
 import { PrismaService } from '../../database/prisma.service';
 import { PushService } from '../push/push.service';
+import { WhatsappNotifier } from '../whatsapp/whatsapp-notifier';
 
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 
@@ -47,6 +48,7 @@ export class MeetingReminderService {
   constructor(
     private prisma: PrismaService,
     private push: PushService,
+    private whatsapp: WhatsappNotifier,
     private analytics: AnalyticsService,
   ) {}
 
@@ -169,6 +171,9 @@ export class MeetingReminderService {
         body: message,
         data: { type: 'meeting' },
       });
+      const when =
+        kind === 'DAY_OF' ? `today at ${meeting.time}` : kind === 'TEN_MINUTES_BEFORE' ? 'in 10 minutes' : 'starting now';
+      await this.whatsapp.toUsers(userIds, 'meeting_reminder', (r) => [r.firstName, meeting.title, when, meeting.location]);
     } catch (e) {
       // The reminder row is already recorded, so a delivery failure here
       // won't cause a duplicate send on the next tick — log and move on.

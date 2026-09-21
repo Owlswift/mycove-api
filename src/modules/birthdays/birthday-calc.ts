@@ -14,8 +14,13 @@ export interface CalendarDate {
   day: number; // 1-31
 }
 
+export interface EstateToday extends CalendarDate {
+  /** 0 = Sunday … 6 = Saturday */
+  weekday: number;
+}
+
 /** Today's date on the estate's calendar. */
-export function todayInEstate(now: Date = new Date()): CalendarDate {
+export function todayInEstate(now: Date = new Date()): EstateToday {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: ESTATE_TIME_ZONE,
     year: 'numeric',
@@ -23,7 +28,8 @@ export function todayInEstate(now: Date = new Date()): CalendarDate {
     day: '2-digit',
   }).formatToParts(now);
   const get = (type: string) => Number(parts.find((p) => p.type === type)!.value);
-  return { year: get('year'), month: get('month'), day: get('day') };
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: ESTATE_TIME_ZONE, weekday: 'short' }).format(now);
+  return { year: get('year'), month: get('month'), day: get('day'), weekday: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekday) };
 }
 
 function isLeap(year: number): boolean {

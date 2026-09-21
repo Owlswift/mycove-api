@@ -3,6 +3,8 @@ import { Cron } from '@nestjs/schedule';
 import { AnalyticsService } from '../../common/analytics/analytics.service';
 import { PrismaService } from '../../database/prisma.service';
 import { PushService } from '../push/push.service';
+import { ParamBuilder, WhatsappEvent, WhatsappNotifier } from '../whatsapp/whatsapp-notifier';
+import { todayInEstate } from '../birthdays/birthday-calc';
 import { summarizeResident } from '../dues/dues-calc';
 import { loadRateBook } from '../dues/dues-rates';
 
@@ -36,6 +38,7 @@ export class RemindersService {
   constructor(
     private prisma: PrismaService,
     private push: PushService,
+    private whatsapp: WhatsappNotifier,
     private analytics: AnalyticsService,
   ) {}
 
@@ -45,7 +48,9 @@ export class RemindersService {
     try {
       const estates = await this.prisma.estate.findMany({ select: { id: true } });
       for (const estate of estates) {
-        const counts = await this.sendAllForEstate(estate.id);
+        // Push goes out every day; the WhatsApp copy only on Mondays, so an
+        // owing resident gets one WhatsApp reminder a week, not thirty a month.
+        const counts = await this.sendAllForEstate(estate.id, { whatsapp: todayInEstate().weekday === 1 });
         if (counts.dues + counts.levies + counts.pledges > 0) {
           this.logger.log(
             `Daily payment reminders for estate ${estate.id}: ${JSON.stringify(counts)}`,
@@ -62,10 +67,11 @@ export class RemindersService {
   }
 
   /** One full sweep for one estate — shared by the cron and the admin button. */
-  async sendAllForEstate(estateId: string): Promise<ReminderCounts> {
+  async sendAllForEstate(estateId: string, opts: { whatsapp?: boolean } = { whatsapp: true }): Promise<ReminderCounts> {
+    const wa = opts.whatsapp === true;
     const [dues, levies, pledges] = await Promise.all([
-      this.sendDuesReminders(estateId),
-      this.sendLevyReminders(estateId),
+      this.sendDuesReminders(estateId, wa),
+      this.sendLevyReminders(estateId, wa),
       this.sendPledgeReminders(estateId),
     ]);
     return { dues, levies, pledges };
@@ -82,7 +88,7 @@ export class RemindersService {
   }
 
   /** Residents whose calendar-accrued dues balance is above zero. */
-  private async sendDuesReminders(estateId: string): Promise<number> {
+  private async sendDuesReminders(estateId: string, whatsapp: boolean): Promise<number> {
     const [residents, rates] = await Promise.all([
       this.prisma.user.findMany({
         where: { estateId, role: 'RESIDENT', active: true, duesLiable: true },
@@ -114,6 +120,9 @@ export class RemindersService {
         r.id,
         'dues',
         `Reminder: you currently owe ${formatNaira(balance)} in estate dues. Please settle from the Dues tab.`,
+        whatsapp
+          ? { event: 'dues_reminder', params: (rc) => [rc.firstName, formatNaira(balance), String(summary?.monthsOwed ?? 0)] }
+          : undefined,
       );
       sent++;
     }
@@ -121,7 +130,7 @@ export class RemindersService {
   }
 
   /** Liable residents with at least one unpaid levy — one combined message each. */
-  private async sendLevyReminders(estateId: string): Promise<number> {
+  private async sendLevyReminders(estateId: string, whatsapp: boolean): Promise<number> {
     const [levies, liableUsers, payments] = await Promise.all([
       this.prisma.levy.findMany({ where: { estateId } }),
       this.prisma.user.findMany({
@@ -155,6 +164,9 @@ export class RemindersService {
         u.id,
         'levy',
         `Reminder: you have ${unpaid.length} unpaid lev${unpaid.length === 1 ? 'y' : 'ies'} totaling ${formatNaira(total)}: ${list}.`,
+        whatsapp
+          ? { event: 'levy_reminder', params: (rc) => [rc.firstName, String(unpaid.length), formatNaira(total)] }
+          : undefined,
       );
       sent++;
     }
@@ -186,7 +198,13 @@ export class RemindersService {
   }
 
   /** In-app Notification row + push — same pairing as every other notify path. */
-  private async notify(estateId: string, userId: string, type: string, message: string) {
+  private async notify(
+    estateId: string,
+    userId: string,
+    type: string,
+    message: string,
+    whatsapp?: { event: WhatsappEvent; params: ParamBuilder },
+  ) {
     await this.prisma.notification.create({
       data: { userId, estateId, title: message, type },
     });
@@ -195,5 +213,6 @@ export class RemindersService {
       body: message,
       data: { type },
     });
+    if (whatsapp) await this.whatsapp.toUser(userId, whatsapp.event, whatsapp.params);
   }
 }

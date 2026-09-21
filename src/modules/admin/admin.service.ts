@@ -317,6 +317,7 @@ export class AdminService {
         ? 'Your access has been restored — you can log in again.'
         : 'Your access to MyCove has been revoked.',
       'account',
+      { event: 'account_access_changed', params: (r) => [r.firstName, active ? 'restored' : 'revoked'] },
     );
     return { message: active ? 'Access restored.' : 'Access revoked.' };
   }

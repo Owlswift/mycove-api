@@ -21,8 +21,8 @@ describe('birthday dates', () => {
   });
 
   it("uses the estate's calendar, not UTC: 23:30 UTC on 11 Sep is already 12 Sep in Lagos", () => {
-    expect(todayInEstate(new Date('2026-09-11T23:30:00Z'))).toEqual(d(2026, 9, 12));
-    expect(todayInEstate(new Date('2026-09-11T10:00:00Z'))).toEqual(d(2026, 9, 11));
+    expect(todayInEstate(new Date('2026-09-11T23:30:00Z'))).toEqual({ ...d(2026, 9, 12), weekday: 6 }); // Saturday
+    expect(todayInEstate(new Date('2026-09-11T10:00:00Z'))).toEqual({ ...d(2026, 9, 11), weekday: 5 }); // Friday
   });
 
   it('finds the next birthday this year or the following one', () => {

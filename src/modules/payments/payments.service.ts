@@ -14,6 +14,25 @@ import type { PaymentGateway } from './gateway/payment-gateway.interface';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WalletService } from '../wallet/wallet.service';
 
+const PURPOSE_LABELS: Record<string, string> = {
+  DUES: 'estate dues',
+  LEVY: 'a levy',
+  WALLET_TOPUP: 'a wallet top-up',
+};
+
+/** The WhatsApp copy of "your payment was successful". */
+function paymentReceivedMessage(payment: { amount: number; purpose: string; reference: string }) {
+  return {
+    event: 'payment_received' as const,
+    params: (r: { firstName: string }) => [
+      r.firstName,
+      `₦${payment.amount.toLocaleString('en-NG')}`,
+      PURPOSE_LABELS[payment.purpose] ?? 'your account',
+      payment.reference,
+    ],
+  };
+}
+
 @Injectable()
 export class PaymentsService {
   constructor(
@@ -202,6 +221,7 @@ export class PaymentsService {
         userId,
         `Payment of ₦${payment.amount.toLocaleString()} was successful`,
         'payment',
+        paymentReceivedMessage(payment),
       );
     }
 
@@ -265,6 +285,7 @@ export class PaymentsService {
       payment.userId,
       `Payment of ₦${payment.amount.toLocaleString()} was successful`,
       'payment',
+      paymentReceivedMessage(payment),
     );
   }
 

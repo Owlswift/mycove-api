@@ -141,6 +141,8 @@ model User {
   /// Birthday as day + month only (no year) — entered by the resident, or the admin.
   birthMonth            Int?
   birthDay              Int?
+  /// true = this resident switched off the WhatsApp copies of their notifications (push is unaffected).
+  whatsappOptOut        Boolean      @default(false)
   fullName              String
   /// The full display address ("12 Palm Street") used everywhere a house is
   /// shown. When street + houseNumber are set it's composed from them (see

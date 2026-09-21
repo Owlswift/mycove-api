@@ -13,6 +13,7 @@ import { DuesService } from '../dues/dues.service';
 import { PushService } from '../push/push.service';
 import { VisitorPassesService } from '../visitor-passes/visitor-passes.service';
 import { WhatsappClient } from '../whatsapp/whatsapp-client';
+import { ParamBuilder, WhatsappEvent, WhatsappNotifier } from '../whatsapp/whatsapp-notifier';
 import {
   APPROVAL_WAIT_MINUTES,
   checkSchedule,
@@ -45,6 +46,7 @@ export class DomesticService {
     private prisma: PrismaService,
     private push: PushService,
     private whatsapp: WhatsappClient,
+    private whatsappNotifier: WhatsappNotifier,
     private passes: VisitorPassesService,
     private dues: DuesService,
   ) {}
@@ -309,6 +311,8 @@ export class DomesticService {
           s.resident,
           `${s.name} tried to get an entry code outside their set times (${describeSchedule(s)}). No code was sent.`,
           'domestic_refused',
+          {},
+          { event: 'domestic_staff_refused', params: (r) => [r.firstName, s.name, `it is outside their set times (${describeSchedule(s)})`] },
         );
       }
       return;
@@ -340,6 +344,8 @@ export class DomesticService {
         resident,
         `${staff.name} tried to get an entry code outside their set times (${describeSchedule(staff)}). No code was sent.`,
         'domestic_refused',
+        {},
+        { event: 'domestic_staff_refused', params: (r) => [r.firstName, staff.name, `it is outside their set times (${describeSchedule(staff)})`] },
       );
       return;
     }
@@ -351,6 +357,8 @@ export class DomesticService {
         resident,
         `${staff.name} asked for an entry code but your outstanding dues are blocking new codes. Pay your dues to allow it.`,
         'domestic_refused',
+        {},
+        { event: 'domestic_staff_refused', params: (r) => [r.firstName, staff.name, 'your outstanding dues are blocking new codes'] },
       );
       return;
     }
@@ -391,6 +399,7 @@ export class DomesticService {
         `${staff.name} is asking for an entry code. Open MyCove to approve or decline.`,
         'domestic_approval',
         { requestId: request.id },
+        { event: 'domestic_staff_approval', params: (r) => [r.firstName, staff.name] },
       );
       return;
     }
@@ -406,6 +415,8 @@ export class DomesticService {
       staff.resident,
       `${staff.name} has been sent an entry code, valid for ${CODE_VALID_MINUTES} minutes.`,
       'domestic_code',
+      {},
+      { event: 'domestic_staff_code_sent', params: (r) => [r.firstName, staff.name, String(CODE_VALID_MINUTES)] },
     );
     return pass;
   }
@@ -424,11 +435,14 @@ export class DomesticService {
     message: string,
     type: string,
     data: Record<string, string> = {},
+    whatsapp?: { event: WhatsappEvent; params: ParamBuilder },
   ) {
     await this.prisma.notification.create({
       data: { userId: resident.id, estateId: resident.estateId, title: message, type },
     });
     await this.push.sendToUser(resident.id, { title: 'MyCove', body: message, data: { type, ...data } });
+    // The WhatsApp copy (when a template is set up) goes alongside the push.
+    if (whatsapp) await this.whatsappNotifier.toUser(resident.id, whatsapp.event, whatsapp.params);
   }
 
   // ── Approval requests that were never answered ────────────────────────

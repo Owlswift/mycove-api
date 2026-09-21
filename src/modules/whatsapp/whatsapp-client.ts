@@ -18,12 +18,27 @@ export class WhatsappClient {
     return Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_ACCESS_TOKEN);
   }
 
-  /** [to] is an E.164 number like +2348012345678. Returns whether WhatsApp accepted it. */
-  async sendText(to: string, body: string): Promise<boolean> {
+  /**
+   * Sends an approved template — the only way to message someone who hasn't
+   * written to us in the last 24 hours. [bodyParams] fill {{1}}, {{2}}… in
+   * order; [codeButton] fills the Copy code button of an authentication template.
+   */
+  async sendTemplate(to: string, name: string, language: string, bodyParams: string[], codeButton?: string): Promise<boolean> {
     if (!this.configured) {
-      this.logger.warn(`WhatsApp not configured — would have sent to ${to}: ${body}`);
+      this.logger.warn(`WhatsApp not configured — would have sent template ${name} to ${to}: ${bodyParams.join(' | ')}`);
       return false;
     }
+    const components: unknown[] = [];
+    if (bodyParams.length > 0) {
+      components.push({ type: 'body', parameters: bodyParams.map((text) => ({ type: 'text', text })) });
+    }
+    if (codeButton) {
+      components.push({ type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: codeButton }] });
+    }
+    return this.post(to, { type: 'template', template: { name, language: { code: language }, components } });
+  }
+
+  private async post(to: string, message: Record<string, unknown>): Promise<boolean> {
     try {
       const response = await fetch(
         `https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
@@ -33,12 +48,7 @@ export class WhatsappClient {
             Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to: to.replace(/^\+/, ''),
-            type: 'text',
-            text: { body },
-          }),
+          body: JSON.stringify({ messaging_product: 'whatsapp', to: to.replace(/^\+/, ''), ...message }),
         },
       );
       if (!response.ok) {
@@ -50,5 +60,14 @@ export class WhatsappClient {
       this.logger.error(`WhatsApp send to ${to} failed: ${(e as Error).message}`);
       return false;
     }
+  }
+
+  /** [to] is an E.164 number like +2348012345678. Returns whether WhatsApp accepted it. */
+  async sendText(to: string, body: string): Promise<boolean> {
+    if (!this.configured) {
+      this.logger.warn(`WhatsApp not configured — would have sent to ${to}: ${body}`);
+      return false;
+    }
+    return this.post(to, { type: 'text', text: { body } });
   }
 }

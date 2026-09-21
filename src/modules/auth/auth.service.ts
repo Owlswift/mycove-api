@@ -17,6 +17,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { CompleteForceResetDto } from './dto/complete-force-reset.dto';
 import { resolveAddress } from '../../common/utils/address';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { WhatsappNotifier } from '../whatsapp/whatsapp-notifier';
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const RESET_TOKEN_PURPOSE = 'password-reset';
@@ -47,6 +48,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
+    private whatsapp: WhatsappNotifier,
   ) {}
 
   async login(dto: LoginDto) {
@@ -144,6 +146,9 @@ export class AuthService {
       // No SMS provider wired up: the code is echoed back for local/demo
       // use instead of silently doing nothing. Still validated for real
       // on verify.
+      // Delivered over WhatsApp when the password-reset template is set up
+      // (a Copy code button carries the same code); otherwise nothing is sent.
+      void this.whatsapp.toPhone(user.phone, 'password_reset', [code], code);
       devOtp = process.env.NODE_ENV === 'production' ? undefined : code;
     }
 
