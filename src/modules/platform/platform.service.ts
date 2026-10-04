@@ -15,6 +15,8 @@ import { CreateDiscoDto } from './dto/create-disco.dto';
 import { UpdateDiscoDto } from './dto/update-disco.dto';
 import { CreateWebsiteLeadDto } from './dto/create-website-lead.dto';
 import { UpdateWebsiteLeadDto } from './dto/update-website-lead.dto';
+import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
+import { SetUserRoleDto } from './dto/set-user-role.dto';
 
 const ACCESS_TOKEN_TTL = '12h';
 
@@ -113,6 +115,47 @@ export class PlatformService {
       include: { users: { select: { id: true, phone: true, fullName: true, role: true } } },
     });
     return estate;
+  }
+
+  /**
+   * Cross-estate password reset — for when an estate's own admin account
+   * is itself the one that's locked out (so the normal `/admin/users/:id/
+   * reset-password` flow, which requires an already-working admin JWT for
+   * that estate, isn't usable), or for platform-side account recovery in
+   * general. Looks the user up by phone only, not scoped to an estateId.
+   */
+  async resetUserPassword(dto: ResetUserPasswordDto) {
+    const phone = normalizePhone(dto.phone);
+    const user = await this.prisma.user.findUnique({ where: { phone } });
+    if (!user) throw new NotFoundException('No user found with that phone number.');
+
+    const passwordHash = await argon2.hash(dto.password);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash, mustResetPassword: false },
+    });
+    return { message: 'Password reset.', userId: user.id, fullName: user.fullName, role: user.role };
+  }
+
+  /**
+   * Cross-estate role change — a blunt platform-level tool for account
+   * recovery/support (e.g. promoting an existing resident to ADMIN) that
+   * bypasses the normal `/admin/users` flow, which can only create a NEW
+   * account rather than re-role an existing one, and requires an
+   * already-working admin JWT for that same estate. Only touches `role`;
+   * password/passwordHash are never read or written here.
+   */
+  async setUserRole(dto: SetUserRoleDto) {
+    const phone = normalizePhone(dto.phone);
+    const user = await this.prisma.user.findUnique({ where: { phone } });
+    if (!user) throw new NotFoundException('No user found with that phone number.');
+
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { role: dto.role },
+      select: { id: true, phone: true, fullName: true, role: true },
+    });
+    return { message: 'Role updated.', ...updated };
   }
 
   // ── DISCOs ───────────────────────────────────────────────────────────

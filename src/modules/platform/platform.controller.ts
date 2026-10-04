@@ -16,6 +16,8 @@ import { CreateDiscoDto } from './dto/create-disco.dto';
 import { UpdateDiscoDto } from './dto/update-disco.dto';
 import { CreateWebsiteLeadDto } from './dto/create-website-lead.dto';
 import { UpdateWebsiteLeadDto } from './dto/update-website-lead.dto';
+import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
+import { SetUserRoleDto } from './dto/set-user-role.dto';
 
 @Controller('platform/auth')
 export class PlatformAuthController {
@@ -46,6 +48,22 @@ export class PlatformEstatesController {
   @Patch(':id/token-charging')
   setTokenCharging(@Param('id') id: string, @Body() dto: SetTokenChargingDto) {
     return this.platform.setTokenCharging(id, dto.enabled);
+  }
+}
+
+@Controller('platform/users')
+@UseGuards(PlatformAuthGuard)
+export class PlatformUsersController {
+  constructor(private platform: PlatformService) {}
+
+  @Post('reset-password')
+  resetPassword(@Body() dto: ResetUserPasswordDto) {
+    return this.platform.resetUserPassword(dto);
+  }
+
+  @Post('set-role')
+  setRole(@Body() dto: SetUserRoleDto) {
+    return this.platform.setUserRole(dto);
   }
 }
 
