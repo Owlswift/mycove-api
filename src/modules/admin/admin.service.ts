@@ -12,6 +12,7 @@ import { SetStaffRolesDto } from './dto/set-staff-roles.dto';
 import { SetResidentTypeDto } from './dto/set-resident-type.dto';
 import { SetMoveInDto } from './dto/set-move-in.dto';
 import { SetBirthdayDto } from '../birthdays/dto/set-birthday.dto';
+import { SetRfidTagDto } from './dto/set-rfid-tag.dto';
 import { isValidBirthday } from '../birthdays/birthday-calc';
 import { NotificationsService } from '../notifications/notifications.service';
 import { resolveAddress } from '../../common/utils/address';
@@ -59,6 +60,7 @@ export class AdminService {
         emergencyContactName: true,
         emergencyContactPhone: true,
         vehiclePlates: true,
+        rfidTag: true,
         mustResetPassword: true,
         active: true,
         createdAt: true,
@@ -86,6 +88,7 @@ export class AdminService {
         emergencyContactName: true,
         emergencyContactPhone: true,
         vehiclePlates: true,
+        rfidTag: true,
         mustResetPassword: true,
         active: true,
         createdAt: true,
@@ -214,6 +217,26 @@ export class AdminService {
       where: { id: userId },
       data: { residentType: dto.residentType },
       select: { id: true, residentType: true },
+    });
+  }
+
+  /** Assigns (or clears, with null) the RFID tag the gate hardware reads for this resident's vehicle — see GateAccessService. */
+  async setRfidTag(estateId: string, userId: string, dto: SetRfidTagDto) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, estateId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const rfidTag = dto.rfidTag ?? null;
+    if (rfidTag) {
+      const existing = await this.prisma.user.findUnique({ where: { rfidTag } });
+      if (existing && existing.id !== userId) {
+        throw new ConflictException('That RFID tag is already assigned to another resident.');
+      }
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { rfidTag },
+      select: { id: true, rfidTag: true },
     });
   }
 

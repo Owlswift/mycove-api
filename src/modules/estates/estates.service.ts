@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 import { UpdateEmergencyContactsDto } from './dto/update-emergency-contacts.dto';
 import { UpdateStreetsDto } from './dto/update-streets.dto';
 import { UpdatePassRestrictionDto } from './dto/update-pass-restriction.dto';
 import { UpdateTokenSettingsDto } from './dto/update-token-settings.dto';
+import { UpdateGateAccessDto } from './dto/update-gate-access.dto';
 
 @Injectable()
 export class EstatesService {
@@ -166,5 +168,47 @@ export class EstatesService {
       },
       select: { passRestrictionMonths: true },
     });
+  }
+
+  async getGateAccessSettings(estateId: string) {
+    const estate = await this.prisma.estate.findUnique({
+      where: { id: estateId },
+      select: { gateAccessRestrictionAmount: true, gateApiKey: true },
+    });
+    if (!estate) throw new NotFoundException('Estate not found');
+    return estate;
+  }
+
+  async updateGateAccessSettings(estateId: string, dto: UpdateGateAccessDto) {
+    const estate = await this.prisma.estate.findUnique({ where: { id: estateId } });
+    if (!estate) throw new NotFoundException('Estate not found');
+
+    return this.prisma.estate.update({
+      where: { id: estateId },
+      data: {
+        ...(dto.gateAccessRestrictionAmount !== undefined && {
+          gateAccessRestrictionAmount: dto.gateAccessRestrictionAmount,
+        }),
+      },
+      select: { gateAccessRestrictionAmount: true },
+    });
+  }
+
+  /**
+   * Generates a fresh shared secret for the estate's gate hardware to send
+   * as X-Api-Key (see EstateApiKeyGuard) — overwrites any previous key, so
+   * the hardware's configuration needs updating with the new value
+   * immediately after calling this.
+   */
+  async regenerateGateApiKey(estateId: string) {
+    const estate = await this.prisma.estate.findUnique({ where: { id: estateId } });
+    if (!estate) throw new NotFoundException('Estate not found');
+
+    const gateApiKey = crypto.randomBytes(32).toString('hex');
+    await this.prisma.estate.update({
+      where: { id: estateId },
+      data: { gateApiKey },
+    });
+    return { gateApiKey };
   }
 }

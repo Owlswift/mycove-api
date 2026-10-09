@@ -13,6 +13,7 @@ import { PAYMENT_GATEWAY } from './gateway/payment-gateway.interface';
 import type { PaymentGateway } from './gateway/payment-gateway.interface';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WalletService } from '../wallet/wallet.service';
+import { GateAccessService } from '../gate-access/gate-access.service';
 
 const PURPOSE_LABELS: Record<string, string> = {
   DUES: 'estate dues',
@@ -41,6 +42,7 @@ export class PaymentsService {
     private notifications: NotificationsService,
     private analytics: AnalyticsService,
     private wallet: WalletService,
+    private gateAccess: GateAccessService,
   ) {}
 
   async initiate(userId: string, estateId: string, dto: InitiatePaymentDto) {
@@ -223,6 +225,11 @@ export class PaymentsService {
         'payment',
         paymentReceivedMessage(payment),
       );
+      if (payment.purpose === 'DUES') {
+        // Fire-and-forget — this can take up to ~45s for the AI evaluation
+        // and must not delay the payment-confirmation response.
+        void this.gateAccess.evaluateEntitlementAfterPayment(userId, payment.estateId, payment.amount);
+      }
     }
 
     return { status: nextStatus };
@@ -287,6 +294,9 @@ export class PaymentsService {
       'payment',
       paymentReceivedMessage(payment),
     );
+    if (payment.purpose === 'DUES') {
+      void this.gateAccess.evaluateEntitlementAfterPayment(payment.userId, payment.estateId, payment.amount);
+    }
   }
 
   async receipt(userId: string, reference: string) {

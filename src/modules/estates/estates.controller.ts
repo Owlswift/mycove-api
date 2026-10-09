@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { EstatesService } from './estates.service';
 import { UpdateEmergencyContactsDto } from './dto/update-emergency-contacts.dto';
 import { UpdateStreetsDto } from './dto/update-streets.dto';
 import { UpdatePassRestrictionDto } from './dto/update-pass-restriction.dto';
 import { UpdateTokenSettingsDto } from './dto/update-token-settings.dto';
+import { UpdateGateAccessDto } from './dto/update-gate-access.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -124,5 +125,27 @@ export class AdminEstatePassRestrictionController {
   @Patch()
   update(@CurrentUser() user: AuthUser, @Body() dto: UpdatePassRestrictionDto) {
     return this.estates.updatePassRestriction(user.estateId, dto);
+  }
+}
+
+@Controller('estates/admin/gate-access')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
+export class AdminEstateGateAccessController {
+  constructor(private estates: EstatesService) {}
+
+  @Get()
+  get(@CurrentUser() user: AuthUser) {
+    return this.estates.getGateAccessSettings(user.estateId);
+  }
+
+  @Patch()
+  update(@CurrentUser() user: AuthUser, @Body() dto: UpdateGateAccessDto) {
+    return this.estates.updateGateAccessSettings(user.estateId, dto);
+  }
+
+  @Post('api-key/regenerate')
+  regenerateApiKey(@CurrentUser() user: AuthUser) {
+    return this.estates.regenerateGateApiKey(user.estateId);
   }
 }

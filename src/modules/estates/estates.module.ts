@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import {
   AdminEstateEmergencyContactsController,
+  AdminEstateGateAccessController,
   AdminEstatePassRestrictionController,
   AdminEstateStreetsController,
   AdminEstateTokenChargingController,
@@ -20,6 +21,7 @@ import { EstatesService } from './estates.service';
     AdminEstateStreetsController,
     AdminEstatePassRestrictionController,
     AdminEstateTokenChargingController,
+    AdminEstateGateAccessController,
     EstatesController,
   ],
   providers: [EstatesService],

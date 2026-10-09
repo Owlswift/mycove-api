@@ -7,9 +7,10 @@ import { MockPaystackGateway } from './gateway/mock-paystack.gateway';
 import { PaystackGateway } from './gateway/paystack.gateway';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WalletModule } from '../wallet/wallet.module';
+import { GateAccessModule } from '../gate-access/gate-access.module';
 
 @Module({
-  imports: [NotificationsModule, WalletModule],
+  imports: [NotificationsModule, WalletModule, GateAccessModule],
   controllers: [PaymentsController, PaymentsWebhookController],
   providers: [
     PaymentsService,

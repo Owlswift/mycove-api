@@ -284,6 +284,75 @@ export class DuesService {
     };
   }
 
+  /**
+   * A resident's current outstanding dues, broken down by unpaid month —
+   * with no passRestrictionMonths gating — used by GateAccessService, which
+   * has its own separate amount-based threshold (gateAccessRestrictionAmount)
+   * rather than the months-based one above. Same household-liability rule
+   * as getPassRestriction/getDues: judged on whoever's dues actually
+   * accrue (the inviter, for a household member). The per-month breakdown is
+   * what lets the gate-denial notification tell a resident exactly which
+   * months they owe for, not just a lump balance. Also carries the data the
+   * Collections Intelligence Service needs to generate payment offers and
+   * reminder messages (current monthly rate, recent payment history) so
+   * every caller works from one consistent snapshot rather than re-querying.
+   */
+  async getOutstandingSummary(userId: string): Promise<{
+    balance: number;
+    unpaidMonths: { month: string; amountDue: number }[];
+    monthlyRate: number | null;
+    recentPayments: { amount: number; daysAgo: number }[];
+  }> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: {
+        estateId: true,
+        createdAt: true,
+        moveInMonth: true,
+        duesLiable: true,
+        residentType: true,
+        invitedById: true,
+        invitedBy: { select: { createdAt: true, moveInMonth: true, residentType: true } },
+      },
+    });
+
+    const liable = user.duesLiable ? user : user.invitedBy;
+    const liableUserId = user.duesLiable ? userId : user.invitedById;
+    const empty = { balance: 0, unpaidMonths: [], monthlyRate: null, recentPayments: [] };
+    if (!liable || !liableUserId) return empty;
+
+    const [payments, rates] = await Promise.all([
+      this.prisma.duesLedgerEntry.findMany({
+        where: { userId: liableUserId, type: 'PAYMENT' },
+        orderBy: { createdAt: 'desc' },
+      }),
+      loadRateBook(this.prisma, user.estateId),
+    ]);
+
+    const summary = summarizeResident({
+      joinedAt: liable.createdAt,
+      moveInMonth: liable.moveInMonth,
+      residentType: liable.residentType,
+      payments,
+      rates,
+    });
+    const monthlyRate = rates.rateFor(liable.residentType, monthKeyOf(new Date()));
+    const recentPayments = payments.slice(0, 5).map((p) => ({
+      amount: p.amount,
+      daysAgo: Math.floor((Date.now() - p.createdAt.getTime()) / 86_400_000),
+    }));
+    if (!summary) return { ...empty, monthlyRate };
+
+    return {
+      balance: summary.balance,
+      unpaidMonths: summary.months
+        .filter((m) => m.paid < m.charge)
+        .map((m) => ({ month: m.month, amountDue: m.charge - m.paid })),
+      monthlyRate,
+      recentPayments,
+    };
+  }
+
   /** Finance Secretary reconciling a payment that didn't come through Paystack — cash, bank transfer, etc. paid directly into the estate's account. A receipt image is the evidence; the note is just an optional label. */
   async recordManualDuesPayment(
     userId: string,

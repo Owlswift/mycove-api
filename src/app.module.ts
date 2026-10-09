@@ -30,6 +30,7 @@ import { BirthdaysModule } from './modules/birthdays/birthdays.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { DomesticModule } from './modules/domestic/domestic.module';
 import { PlatformModule } from './modules/platform/platform.module';
+import { GateAccessModule } from './modules/gate-access/gate-access.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { PlatformModule } from './modules/platform/platform.module';
     WhatsappModule,
     DomesticModule,
     PlatformModule,
+    GateAccessModule,
   ],
 })
 export class AppModule {}

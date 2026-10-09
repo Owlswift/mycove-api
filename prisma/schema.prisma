@@ -47,78 +47,97 @@ model PlatformAdmin {
 /// single `WHERE estateId = ...` and it's structurally hard to accidentally
 /// leak one estate's data into another's request.
 model Estate {
-  id                       String   @id @default(cuid())
-  code                     String   @unique
-  name                     String
-  address                  String?
-  managedBy                String?
+  id                          String   @id @default(cuid())
+  code                        String   @unique
+  name                        String
+  address                     String?
+  managedBy                   String?
   /// Security-desk duty phone shown on every resident's SOS screen —
   /// managed by the estate admin (see EstatesController admin endpoints),
   /// since no GUARD account owns a number residents should dial directly.
-  securityGuardPhone       String?
+  securityGuardPhone          String?
   /// Management-office phone shown alongside the security desk number on
   /// the SOS screen — same admin-managed lifecycle as securityGuardPhone.
-  estateAdminPhone         String?
+  estateAdminPhone            String?
   /// Street names the estate admin preloads, so residents pick their street
   /// from this list and only type a house number. Empty = the estate hasn't
   /// configured any yet, and clients fall back to a free-text house address.
-  streets                  String[] @default([])
+  streets                     String[] @default([])
   /// A resident owing MORE than this many months of dues can't generate
   /// visitor passes (they're prompted to pay instead). Admin-configurable
   /// per the estate's policy; null turns the restriction off entirely.
-  passRestrictionMonths    Int?     @default(2)
+  passRestrictionMonths       Int?     @default(2)
+  /// Gate hardware integration: a resident owing MORE than this amount is
+  /// denied entry when their RFID tag is scanned (see GateAccessService).
+  /// Null turns the restriction off — every scanned tag is allowed through
+  /// regardless of balance. A deliberately different knob from
+  /// passRestrictionMonths above (amount vs. months, visitor passes vs.
+  /// the resident's own gate entry) since an estate may want these to
+  /// diverge.
+  gateAccessRestrictionAmount Int?
+  /// Shared secret the estate's gate hardware sends as the X-Api-Key
+  /// header on every /gate-access/check call (see EstateApiKeyGuard).
+  /// Null until an admin generates one. Stored raw, not hashed — this is
+  /// a machine-to-machine API key checked on a potentially high-frequency
+  /// endpoint, not a user password, so a fast unique lookup matters more
+  /// than resisting a DB-compromise scenario the same way a password hash
+  /// would.
+  gateApiKey                  String?  @unique
   /// Paid extra visitor tokens — switched on per estate by the platform
   /// super admin only (off by default). When on, a resident past their
   /// daily free allowance pays the extra price from their wallet.
-  tokenChargingEnabled     Boolean  @default(false)
-  tokenAllowanceRegular    Int      @default(5)
-  tokenAllowanceCommercial Int      @default(20)
+  tokenChargingEnabled        Boolean  @default(false)
+  tokenAllowanceRegular       Int      @default(5)
+  tokenAllowanceCommercial    Int      @default(20)
   /// Naira per extra token; 0 = extra tokens are free.
-  tokenPriceRegular        Int      @default(0)
-  tokenPriceCommercial     Int      @default(0)
-  imageBase64              String?
-  createdAt                DateTime @default(now())
+  tokenPriceRegular           Int      @default(0)
+  tokenPriceCommercial        Int      @default(0)
+  imageBase64                 String?
+  createdAt                   DateTime @default(now())
 
-  users                User[]
-  deviceTokens         DeviceToken[]
-  sessions             Session[]
-  passwordResetOtps    PasswordResetOtp[]
-  announcements        Announcement[]
-  announcementReads    AnnouncementRead[]
-  meetings             Meeting[]
-  calendarEntries      CalendarEntry[]
-  duesLedgerEntries    DuesLedgerEntry[]
-  duesSettings         DuesSettings?
-  duesRates            DuesRate[]
-  birthdayCelebrations BirthdayCelebration[]
-  domesticStaff        DomesticStaff[]
-  domesticRequests     DomesticAccessRequest[]
-  levies               Levy[]
-  levyPayments         LevyPayment[]
-  payments             Payment[]
-  visitorPasses        VisitorPass[]
-  accessLogEntries     AccessLogEntry[]
-  projects             Project[]
-  projectBudgetLines   ProjectBudgetLine[]
-  projectReports       ProjectReport[]
-  projectDonations     ProjectDonation[]
-  projectPledges       ProjectPledge[]
-  spotlights           Spotlight[]
-  projectAllocations   ProjectAllocation[]
-  invoices             Invoice[]
-  polls                Poll[]
-  pollOptions          PollOption[]
-  pollVotes            PollVote[]
-  notifications        Notification[]
-  rulesSections        RulesSection[]
-  ruleItems            RuleItem[]
-  complaints           Complaint[]
-  utilityMeters        UtilityMeter[]
-  utilityPurchases     UtilityPurchase[]
-  wallets              Wallet[]
-  walletTransactions   WalletTransaction[]
-  householdInvites     HouseholdInvite[]
-  voiceLogs            VoiceInteractionLog[]
+  users                  User[]
+  deviceTokens           DeviceToken[]
+  sessions               Session[]
+  passwordResetOtps      PasswordResetOtp[]
+  announcements          Announcement[]
+  announcementReads      AnnouncementRead[]
+  meetings               Meeting[]
+  calendarEntries        CalendarEntry[]
+  duesLedgerEntries      DuesLedgerEntry[]
+  duesSettings           DuesSettings?
+  duesRates              DuesRate[]
+  birthdayCelebrations   BirthdayCelebration[]
+  domesticStaff          DomesticStaff[]
+  domesticRequests       DomesticAccessRequest[]
+  levies                 Levy[]
+  levyPayments           LevyPayment[]
+  payments               Payment[]
+  visitorPasses          VisitorPass[]
+  accessLogEntries       AccessLogEntry[]
+  projects               Project[]
+  projectBudgetLines     ProjectBudgetLine[]
+  projectReports         ProjectReport[]
+  projectDonations       ProjectDonation[]
+  projectPledges         ProjectPledge[]
+  spotlights             Spotlight[]
+  projectAllocations     ProjectAllocation[]
+  invoices               Invoice[]
+  polls                  Poll[]
+  pollOptions            PollOption[]
+  pollVotes              PollVote[]
+  notifications          Notification[]
+  rulesSections          RulesSection[]
+  ruleItems              RuleItem[]
+  complaints             Complaint[]
+  utilityMeters          UtilityMeter[]
+  utilityPurchases       UtilityPurchase[]
+  wallets                Wallet[]
+  walletTransactions     WalletTransaction[]
+  householdInvites       HouseholdInvite[]
+  voiceLogs              VoiceInteractionLog[]
+  gateAccessDecisions    GateAccessDecision[]
+  gateAccessEntitlements GateAccessEntitlement[]
+  gateAccessAttempts     GateAccessAttempt[]
 }
 
 model User {
@@ -154,6 +173,11 @@ model User {
   emergencyContactName  String?
   emergencyContactPhone String?
   vehiclePlates         String[]     @default([])
+  /// The RFID tag/card ID a resident's vehicle gate hardware reads — set
+  /// by an admin, not the resident. Null until assigned. Looked up by the
+  /// gate hardware's access-check call (see GateAccessService); unique
+  /// since a tag identifies exactly one resident.
+  rfidTag               String?      @unique
   mustResetPassword     Boolean      @default(false)
   active                Boolean      @default(true)
   createdAt             DateTime     @default(now())
@@ -202,6 +226,9 @@ model User {
   walletTransactions       WalletTransaction[]
   meetingsApproved         Meeting[]               @relation("MeetingApprover")
   voiceLogs                VoiceInteractionLog[]
+  gateAccessDecisions      GateAccessDecision[]
+  gateAccessEntitlements   GateAccessEntitlement[]
+  gateAccessAttempts       GateAccessAttempt[]
 
   @@index([estateId])
 }
@@ -492,6 +519,89 @@ model DuesLedgerEntry {
 
   @@index([userId])
   @@index([estateId])
+}
+
+/// One AI-generated collections decision, written whenever a resident's RFID
+/// tag is denied at the gate (see GateAccessService). The allow/deny call
+/// itself is a plain deterministic threshold check, not AI — this row is the
+/// audit trail for what happens *after* a deny: the personalized payment
+/// tiers an LLM generated and the message sent to the resident, plus why,
+/// so the decision can be reviewed later (see the collections spec, "Decision
+/// History / Audit Trail").
+model GateAccessDecision {
+  id                 String   @id @default(cuid())
+  estateId           String
+  userId             String
+  outstandingBalance Int
+  monthsOwed         Int
+  /// [{ amount: number, hours: number }] — hours: 0 means "fully settled, no expiry".
+  offers             Json
+  /// The exact CollectionsInput (balance, monthsOwed, monthlyRate, recent
+  /// payments, behavioral history) sent to the LLM for this decision — the
+  /// collections spec's own design principle: "the system should also
+  /// record what information was used to reach the decision" (§16).
+  inputs             Json
+  message            String
+  /// The LLM's own one-line explanation for these amounts/durations — or a
+  /// fixed string when the LLM call failed and a deterministic fallback was
+  /// used instead (see CollectionsIntelligenceService).
+  reasoning          String
+  createdAt          DateTime @default(now())
+
+  estate       Estate                  @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user         User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entitlements GateAccessEntitlement[]
+
+  @@index([estateId])
+  @@index([userId, createdAt])
+}
+
+/// A temporary gate-access window earned by a qualifying payment against a
+/// GateAccessDecision's offer tiers — e.g. paying the ₦30,000 tier buys 24
+/// hours of access even though the full balance is still above the estate's
+/// threshold. GateAccessService checks for a live (unexpired) row here
+/// before falling through to a deny.
+model GateAccessEntitlement {
+  id         String    @id @default(cuid())
+  estateId   String
+  userId     String
+  decisionId String?
+  amountPaid Int
+  grantedAt  DateTime  @default(now())
+  expiresAt  DateTime
+  /// Set once the pre-expiry reminder cron has sent its one reminder for
+  /// this entitlement — the collections spec: "the resident can receive a
+  /// reminder before expiration" (§9). Null = not yet reminded.
+  remindedAt DateTime?
+
+  estate   Estate              @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  decision GateAccessDecision? @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, expiresAt])
+  @@index([estateId])
+  @@index([expiresAt, remindedAt])
+}
+
+/// One row per gate scan, allowed or denied — the collections spec's own
+/// "Data Required" list (§13) calls for every gate access attempt, not just
+/// denials, so usage can be audited and so a resident's history of prior
+/// restrictions feeds into future AI decisions (see CollectionsIntelligenceService).
+/// userId is null for an unrecognized tag — there's no resident to attach it to.
+model GateAccessAttempt {
+  id        String   @id @default(cuid())
+  estateId  String
+  userId    String?
+  rfidTag   String
+  allowed   Boolean
+  reason    String?
+  createdAt DateTime @default(now())
+
+  estate Estate @relation(fields: [estateId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([estateId, createdAt])
+  @@index([userId, createdAt])
 }
 
 /// One row per estate (estateId is unique) — the monthly dues rate Finance

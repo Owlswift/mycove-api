@@ -5,8 +5,9 @@ import { PrismaService } from '../../database/prisma.service';
 import { PushService } from '../push/push.service';
 import { ParamBuilder, WhatsappEvent, WhatsappNotifier } from '../whatsapp/whatsapp-notifier';
 import { todayInEstate } from '../birthdays/birthday-calc';
-import { summarizeResident } from '../dues/dues-calc';
+import { monthKeyOf, summarizeResident } from '../dues/dues-calc';
 import { loadRateBook } from '../dues/dues-rates';
+import { CollectionsIntelligenceService } from '../collections/collections-intelligence.service';
 
 function formatNaira(amount: number): string {
   return `₦${new Intl.NumberFormat('en-NG').format(amount)}`;
@@ -40,6 +41,7 @@ export class RemindersService {
     private push: PushService,
     private whatsapp: WhatsappNotifier,
     private analytics: AnalyticsService,
+    private collections: CollectionsIntelligenceService,
   ) {}
 
   /** Daily at 8:00 server-local time — every estate's owing users get reminded. */
@@ -70,7 +72,7 @@ export class RemindersService {
   async sendAllForEstate(estateId: string, opts: { whatsapp?: boolean } = { whatsapp: true }): Promise<ReminderCounts> {
     const wa = opts.whatsapp === true;
     const [dues, levies, pledges] = await Promise.all([
-      this.sendDuesReminders(estateId, wa),
+      this.sendArrearsReminders(estateId),
       this.sendLevyReminders(estateId, wa),
       this.sendPledgeReminders(estateId),
     ]);
@@ -87,22 +89,63 @@ export class RemindersService {
     return counts;
   }
 
-  /** Residents whose calendar-accrued dues balance is above zero. */
-  private async sendDuesReminders(estateId: string, whatsapp: boolean): Promise<number> {
-    const [residents, rates] = await Promise.all([
+  /**
+   * Residents in dues arrears, reminded on the cadence the collections spec
+   * calls for: less than 3 months owing gets a reminder roughly every other
+   * day (~3x/week); 3 months or more gets one every day. The message itself
+   * is AI-composed per resident (see CollectionsIntelligenceService) rather
+   * than a fixed template, with a deterministic fallback if the LLM call
+   * fails. No WhatsApp copy here — unlike the fixed-template dues/levy
+   * reminders below, a freely-generated message can't go through WhatsApp's
+   * pre-approved template system.
+   */
+  private async sendArrearsReminders(estateId: string): Promise<number> {
+    const [residents, rates, lastReminders, deniedCounts, entitlementCounts] = await Promise.all([
       this.prisma.user.findMany({
         where: { estateId, role: 'RESIDENT', active: true, duesLiable: true },
         select: {
           id: true,
+          fullName: true,
           createdAt: true,
           moveInMonth: true,
           residentType: true,
-          duesLedgerEntries: { where: { type: 'PAYMENT' } },
+          duesLedgerEntries: { where: { type: 'PAYMENT' }, orderBy: { createdAt: 'desc' } },
         },
       }),
       loadRateBook(this.prisma, estateId),
+      this.prisma.notification.findMany({
+        where: { estateId, type: 'arrears_reminder' },
+        orderBy: { createdAt: 'desc' },
+        select: { userId: true, createdAt: true },
+      }),
+      // Prior gate denials, batched per resident — lets the reminder mention
+      // "you've already been denied at the gate" rather than treating every
+      // resident as if this is their first notice (collections spec §6).
+      this.prisma.gateAccessAttempt.groupBy({
+        by: ['userId'],
+        where: { estateId, allowed: false, userId: { not: null } },
+        _count: { _all: true },
+      }),
+      this.prisma.gateAccessEntitlement.groupBy({
+        by: ['userId'],
+        where: { estateId },
+        _count: { _all: true },
+      }),
     ]);
     if (rates.isEmpty) return 0;
+
+    const lastSentAt = new Map<string, Date>();
+    for (const n of lastReminders) {
+      if (!lastSentAt.has(n.userId)) lastSentAt.set(n.userId, n.createdAt);
+    }
+    const priorDeniedByUser = new Map<string, number>();
+    for (const d of deniedCounts) {
+      if (d.userId) priorDeniedByUser.set(d.userId, d._count._all);
+    }
+    const priorEntitlementsByUser = new Map<string, number>();
+    for (const e of entitlementCounts) {
+      priorEntitlementsByUser.set(e.userId, e._count._all);
+    }
 
     let sent = 0;
     for (const r of residents) {
@@ -114,16 +157,35 @@ export class RemindersService {
         rates,
       });
       const balance = summary?.balance ?? 0;
-      if (balance <= 0) continue;
-      await this.notify(
-        estateId,
-        r.id,
-        'dues',
-        `Reminder: you currently owe ${formatNaira(balance)} in estate dues. Please settle from the Dues tab.`,
-        whatsapp
-          ? { event: 'dues_reminder', params: (rc) => [rc.firstName, formatNaira(balance), String(summary?.monthsOwed ?? 0)] }
-          : undefined,
-      );
+      const monthsOwed = summary?.monthsOwed ?? 0;
+      if (balance <= 0 || monthsOwed <= 0) continue;
+
+      const last = lastSentAt.get(r.id);
+      const daysSinceLast = last ? Math.floor((Date.now() - last.getTime()) / 86_400_000) : Infinity;
+      const cadenceDays = monthsOwed >= 3 ? 1 : 2;
+      if (daysSinceLast < cadenceDays) continue;
+
+      const monthlyRate = rates.rateFor(r.residentType, monthKeyOf(new Date()));
+      const recentPayments = r.duesLedgerEntries.slice(0, 5).map((p) => ({
+        amount: p.amount,
+        daysAgo: Math.floor((Date.now() - p.createdAt.getTime()) / 86_400_000),
+      }));
+
+      const { message } = await this.collections.generateArrearsReminder({
+        residentFirstName: r.fullName.split(' ')[0],
+        balance,
+        monthsOwed,
+        monthlyRate,
+        recentPayments,
+        history: {
+          priorDeniedAttempts: priorDeniedByUser.get(r.id) ?? 0,
+          priorEntitlementsEarned: priorEntitlementsByUser.get(r.id) ?? 0,
+          lastEntitlementAmount: null,
+          lastEntitlementDaysAgo: null,
+        },
+      });
+
+      await this.notify(estateId, r.id, 'arrears_reminder', message);
       sent++;
     }
     return sent;

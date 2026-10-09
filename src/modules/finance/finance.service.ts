@@ -12,6 +12,7 @@ import { DuesImportService, ImportRowInput } from '../dues/dues-import.service';
 import { loadRateBook } from '../dues/dues-rates';
 import { summarizeResident } from '../dues/dues-calc';
 import { NotificationsService } from '../notifications/notifications.service';
+import { GateAccessService } from '../gate-access/gate-access.service';
 
 @Injectable()
 export class FinanceService {
@@ -20,6 +21,7 @@ export class FinanceService {
     private dues: DuesService,
     private duesImport: DuesImportService,
     private notifications: NotificationsService,
+    private gateAccess: GateAccessService,
   ) {}
 
   getDuesRates(estateId: string) {
@@ -328,6 +330,7 @@ export class FinanceService {
         params: (r) => [r.firstName, `₦${amount.toLocaleString('en-NG')}`, 'estate dues', 'Recorded by the estate office'],
       },
     );
+    void this.gateAccess.evaluateEntitlementAfterPayment(residentId, estateId, amount);
     return result;
   }
 

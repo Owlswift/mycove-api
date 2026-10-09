@@ -6,6 +6,7 @@ import { SetStaffRolesDto } from './dto/set-staff-roles.dto';
 import { SetResidentTypeDto } from './dto/set-resident-type.dto';
 import { SetMoveInDto } from './dto/set-move-in.dto';
 import { SetBirthdayDto } from '../birthdays/dto/set-birthday.dto';
+import { SetRfidTagDto } from './dto/set-rfid-tag.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -47,6 +48,11 @@ export class AdminController {
     @Body() dto: SetResidentTypeDto,
   ) {
     return this.admin.setResidentType(user.estateId, id, dto);
+  }
+
+  @Patch('users/:id/rfid-tag')
+  setRfidTag(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: SetRfidTagDto) {
+    return this.admin.setRfidTag(user.estateId, id, dto);
   }
 
   @Patch('users/:id/staff-roles')
