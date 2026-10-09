@@ -1231,6 +1231,34 @@ model WebsiteLead {
   @@index([status])
 }
 
+enum QrScanPlatform {
+  IOS
+  ANDROID
+  OTHER
+}
+
+/// One scan of the "download the app" QR code on the public marketing site
+/// (mycove-website's /get redirect) — anonymous, not tied to any User or
+/// Estate, since whoever scanned it hasn't installed or logged into
+/// anything yet. Records which store they were sent to and a best-effort
+/// location derived from their IP (offline lookup, see geoip-lite usage in
+/// PlatformService — no external geolocation API call, so this never adds
+/// latency to the redirect itself). Read from the cross-estate platform
+/// dashboard (mycove-super-admin), same as WebsiteLead above.
+model QrScan {
+  id        String         @id @default(cuid())
+  platform  QrScanPlatform
+  userAgent String
+  ip        String?
+  country   String?
+  region    String?
+  city      String?
+  createdAt DateTime       @default(now())
+
+  @@index([platform])
+  @@index([createdAt])
+}
+
 /// A cleaner, cook, driver… a resident has authorised to get their own entry
 /// code over WhatsApp, so the resident isn't asked each time. The phone is
 /// the staff member's WhatsApp number (one number belongs to one household).

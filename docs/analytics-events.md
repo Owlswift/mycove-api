@@ -204,6 +204,17 @@ Where `payment_type = monthly_dues | levy`.
 | `vending_failed` | Provider rejected | utility_type, provider, amount, failure_reason, duration_ms |
 | `vending_timeout` | Provider timed out | utility_type, provider, timeout_ms |
 
+## Marketing site
+
+| Event | Trigger | Properties |
+|---|---|---|
+| `qr_scan_recorded` | `/get` redirect hit (mycove-website) | platform, country, region, city |
+
+> Fired via `trackSystem` (anonymous — no User row exists for a QR scan),
+> from `PlatformService.recordQrScan`. The scan is also stored in
+> Postgres (`QrScan` model) so the super-admin dashboard's QR Scans page
+> can show aggregates without querying Mixpanel.
+
 ## Reliability
 
 | Event | Trigger | Properties |

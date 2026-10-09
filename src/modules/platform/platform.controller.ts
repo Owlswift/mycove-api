@@ -2,12 +2,14 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
 import { PlatformService } from './platform.service';
+import { RecordQrScanDto } from './dto/record-qr-scan.dto';
 import { PlatformAuthGuard } from './platform-auth.guard';
 import { PlatformLoginDto } from './dto/platform-login.dto';
 import { CreateEstateDto } from './dto/create-estate.dto';
@@ -113,5 +115,38 @@ export class PlatformLeadsController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateWebsiteLeadDto) {
     return this.platform.updateLead(id, dto);
+  }
+}
+
+/// Public — fired by mycove-website's /get redirect route for every QR-code
+/// scan, anonymous, so no auth guard. Falls back to this request's own
+/// X-Real-IP (nginx-set) only if the website didn't already pass the
+/// visitor's real IP explicitly in the body — see RecordQrScanDto's comment
+/// for why the explicit body field is the normal path (this is a
+/// server-to-server call, so this request's own X-Real-IP is otherwise
+/// just the website container's address, not the visitor's).
+@Controller('platform/qr-scans')
+export class PlatformQrScansPublicController {
+  constructor(private platform: PlatformService) {}
+
+  @Post()
+  record(@Body() dto: RecordQrScanDto, @Headers('x-real-ip') realIp?: string) {
+    return this.platform.recordQrScan({ ...dto, ip: dto.ip ?? realIp });
+  }
+}
+
+@Controller('platform/qr-scans')
+@UseGuards(PlatformAuthGuard)
+export class PlatformQrScansController {
+  constructor(private platform: PlatformService) {}
+
+  @Get()
+  list() {
+    return this.platform.listQrScans();
+  }
+
+  @Get('stats')
+  stats() {
+    return this.platform.getQrScanStats();
   }
 }

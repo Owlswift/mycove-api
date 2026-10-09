@@ -17,6 +17,9 @@ import { CreateWebsiteLeadDto } from './dto/create-website-lead.dto';
 import { UpdateWebsiteLeadDto } from './dto/update-website-lead.dto';
 import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { SetUserRoleDto } from './dto/set-user-role.dto';
+import { RecordQrScanDto } from './dto/record-qr-scan.dto';
+import { AnalyticsService } from '../../common/analytics/analytics.service';
+import * as geoip from 'geoip-lite';
 
 const ACCESS_TOKEN_TTL = '12h';
 
@@ -25,6 +28,7 @@ export class PlatformService {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
+    private analytics: AnalyticsService,
   ) {}
 
   async login(dto: PlatformLoginDto) {
@@ -205,5 +209,63 @@ export class PlatformService {
     });
     if (!existing) throw new NotFoundException('Lead not found.');
     return this.prisma.websiteLead.update({ where: { id }, data: dto });
+  }
+
+  // ── QR scans ("download the app" code on the marketing site) ────────────
+  // recordQrScan is called from mycove-website's /get redirect route with
+  // no auth — an anonymous visitor scanning a code, not a platform admin.
+  // Geolocation is an offline, bundled-database lookup (geoip-lite) rather
+  // than a call to an external API: approximate is fine for this, and it
+  // means recording a scan never adds latency or a point of failure to the
+  // redirect the visitor is actually waiting on (mycove-website fires this
+  // without awaiting it anyway, but there's no reason to make it slow).
+  async recordQrScan(dto: RecordQrScanDto) {
+    const geo = dto.ip ? geoip.lookup(dto.ip) : null;
+    const scan = await this.prisma.qrScan.create({
+      data: {
+        platform: dto.platform,
+        userAgent: dto.userAgent,
+        ip: dto.ip,
+        country: geo?.country,
+        region: geo?.region,
+        city: geo?.city,
+      },
+    });
+    this.analytics.trackSystem('qr_scan_recorded', {
+      platform: dto.platform,
+      country: geo?.country,
+      region: geo?.region,
+      city: geo?.city,
+    });
+    return { id: scan.id };
+  }
+
+  listQrScans() {
+    return this.prisma.qrScan.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+  }
+
+  async getQrScanStats() {
+    const [total, byPlatform, byCountry, recent] = await Promise.all([
+      this.prisma.qrScan.count(),
+      this.prisma.qrScan.groupBy({ by: ['platform'], _count: { _all: true } }),
+      this.prisma.qrScan.groupBy({
+        by: ['country'],
+        where: { country: { not: null } },
+        _count: { _all: true },
+        orderBy: { _count: { country: 'desc' } },
+        take: 10,
+      }),
+      this.prisma.qrScan.findMany({ orderBy: { createdAt: 'desc' }, take: 20 }),
+    ]);
+
+    return {
+      total,
+      byPlatform: byPlatform.map((p) => ({ platform: p.platform, count: p._count._all })),
+      byCountry: byCountry.map((c) => ({ country: c.country, count: c._count._all })),
+      recent,
+    };
   }
 }
