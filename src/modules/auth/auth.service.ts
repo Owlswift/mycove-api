@@ -22,12 +22,17 @@ import { WhatsappNotifier } from '../whatsapp/whatsapp-notifier';
 const OTP_TTL_MS = 10 * 60 * 1000;
 const RESET_TOKEN_PURPOSE = 'password-reset';
 const REFRESH_TOKEN_PURPOSE = 'refresh';
-// Long-lived on purpose: a resident or officer stays signed in for a month
-// at a time, and a refresh token quietly renews that for up to a year. This
-// stays safe because JwtAuthGuard re-checks every request against the
-// database (revoked token, deactivated account, role no longer held).
-const ACCESS_TOKEN_TTL = '30d';
-const ACCESS_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+// Long-lived on purpose — this is a residential estate app, not a fintech
+// app, so there's no reason to force a resident or officer back through
+// login within any realistic usage window. A session (access + refresh
+// token) lasts a full year outright; the refresh token's sliding renewal on
+// top of that means an account that's opened at least once a year never
+// sees a forced logout at all. This stays safe because JwtAuthGuard
+// re-checks every request against the database (revoked token, deactivated
+// account, role no longer held), so a stolen/compromised token can still be
+// killed immediately via the blacklist regardless of its nominal TTL.
+const ACCESS_TOKEN_TTL = '365d';
+const ACCESS_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 const REFRESH_TOKEN_TTL = '365d';
 const REFRESH_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
